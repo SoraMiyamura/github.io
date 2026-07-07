@@ -428,29 +428,263 @@
 
 <script>
 "use strict";
-/* ───────── data ───────── */
+/* ═════════ 路線メタ ═════════ */
 const LINES = {
   SH:{c:"var(--sh)",  s:"SH", name:"東急新横浜線"},
   TY:{c:"var(--ty)",  s:"TY", name:"東急東横線"},
   MG:{c:"var(--mg)",  s:"MG", name:"東急目黒線"},
   I: {c:"var(--mita)",s:"I",  name:"都営三田線"},
-  N: {c:"var(--nam)", s:"N",  name:"東京メトロ南北線"},
-  F: {c:"var(--fuku)",s:"F",  name:"東京メトロ副都心線"}
+  N: {c:"var(--nam)", s:"N",  name:"東京メトロ南北線"}
 };
-const STATIONS = ["新横浜","新綱島","日吉","武蔵小杉","田園調布","自由が丘","中目黒","渋谷","目黒","白金高輪","飯田橋","永田町"];
 
-/* ───────── persistence (localStorage) ─────────
-   実際にPWAとして公開した際、経路データは端末のlocalStorageに保存される。
-   ホーム画面に追加したPWAはSafariのITP(7日でデータ消去)の対象外になるため、
-   通常の利用では消えない。 */
-const STORAGE_KEY = "doretore.state.v1";
+/* ═════════ ネットワーク定義 ═════════
+   [駅名, 起点からの累積所要分(各停)] で経路を表す。
+   将来ODPT等の実データに差し替える場合はこのブロックと
+   generateTimetable() を実データ由来のJSONに置き換える。 */
+const P_SH  = [["新横浜",0],["新綱島",3],["日吉",6]];
+const P_COR = [["日吉",0],["元住吉",2],["武蔵小杉",4],["新丸子",5],["多摩川",7],["田園調布",9]]; // 東横線・目黒線 並走区間(全駅対面乗換)
+const P_MG  = [["田園調布",0],["奥沢",2],["大岡山",4],["洗足",6],["西小山",7],["武蔵小山",9],["不動前",11],["目黒",13]];
+const P_SHD = [["目黒",0],["白金台",2],["白金高輪",4]];
+const P_N   = [["白金高輪",0],["麻布十番",2],["六本木一丁目",4],["溜池山王",6],["永田町",8],["四ツ谷",10],["市ケ谷",12],["飯田橋",14],["後楽園",16],["東大前",18],["本駒込",19],["駒込",21],["西ケ原",23],["王子",25],["王子神谷",27],["志茂",29],["赤羽岩淵",31]];
+const P_I   = [["白金高輪",0],["三田",2],["芝公園",4],["御成門",5],["内幸町",7],["日比谷",9],["大手町",11],["神保町",13],["水道橋",15],["春日",16],["白山",18],["千石",20],["巣鴨",22],["西巣鴨",24],["新板橋",25],["板橋区役所前",27],["板橋本町",29],["本蓮沼",31],["志村坂上",33],["志村三丁目",34],["蓮根",36],["西台",38],["高島平",39],["新高島平",41],["西高島平",43]];
+
+function joinPaths(...ps){
+  const out = ps[0].map(x=>[x[0],x[1]]);
+  for(let k=1;k<ps.length;k++){
+    const base = out[out.length-1][1];
+    ps[k].forEach(([n,c],i)=>{ if(i===0) return; out.push([n, base+c]); });
+  }
+  return out;
+}
+function reversePath(p){
+  const end = p[p.length-1][1];
+  return [...p].reverse().map(([n,c])=>[n, end-c]);
+}
+function sliceFrom(p, st){
+  const i = p.findIndex(x=>x[0]===st);
+  const o = p[i][1];
+  return p.slice(i).map(([n,c])=>[n, c-o]);
+}
+function truncTo(p, st){
+  const i = p.findIndex(x=>x[0]===st);
+  return p.slice(0, i+1);
+}
+
+const FULL = {
+  I:  joinPaths(P_SH, P_COR, P_MG, P_SHD, P_I),   // 新横浜→西高島平
+  N:  joinPaths(P_SH, P_COR, P_MG, P_SHD, P_N),   // 新横浜→赤羽岩淵
+  TY: joinPaths(P_SH, P_COR)                       // 新横浜→(田園調布から東横線渋谷方面へ抜ける)
+};
+
+/* 駅集合(路線バッジ判定用) */
+const SET_SH  = new Set(["新横浜","新綱島"]);
+const SET_COR = new Set(P_COR.map(x=>x[0]));
+const SET_MGE = new Set(["奥沢","大岡山","洗足","西小山","武蔵小山","不動前"]);
+const SET_SHD = new Set(["目黒","白金台","白金高輪"]);
+const SET_N   = new Set(P_N.map(x=>x[0]));
+function stationLine(st, train){
+  if(SET_SH.has(st)) return "SH";
+  if(SET_COR.has(st)) return train.branch==="TY" ? "TY" : "MG";
+  if(SET_MGE.has(st)) return "MG";
+  if(SET_SHD.has(st)) return train.branch==="N" ? "N" : (train.branch==="I" ? "I" : "MG");
+  if(SET_N.has(st)) return "N";
+  return "I";
+}
+
+/* 対面乗り換え可能駅(乗換0分): 日吉〜田園調布の全駅 + 白金高輪 */
+const TRANSFER = new Set([...P_COR.map(x=>x[0]), "白金高輪"]);
+
+/* 急行通過駅(地下鉄区間は全列車各駅停車) */
+const EXP_SKIP = new Set(["元住吉","新丸子","多摩川","奥沢","洗足","西小山","不動前"]);
+
+/* 駅選択リスト(順序: 三田線系統 → 南北線) */
+const STATIONS = [...FULL.I.map(x=>x[0]), ...P_N.slice(1).map(x=>x[0])];
+
+/* ═════════ 終日ダイヤ生成(平日・デモ用) ═════════ */
+const TRAINS = [];
+const stationDeps = new Map(); // 駅名 → [ [発時刻, train, stopIdx] ... ] 発時刻順
+
+function makeTrain(path, dep, kind, branch, dest, origin, dir){
+  const stops = [];
+  let skip = 0;
+  for(const [n,c] of path){
+    if(kind==="exp" && EXP_SKIP.has(n)){ skip += 0.5; continue; }
+    stops.push([n, Math.round(dep + c - skip)]);
+  }
+  if(stops.length < 2) return;
+  TRAINS.push({ id:"T"+TRAINS.length, kind, branch, dest, origin, dir, stops });
+}
+function headway(t){
+  const h = Math.floor(t/60);
+  if((h>=7&&h<9)||(h>=17&&h<19)) return 8;   // ラッシュ
+  if(h<6||h>=22) return 15;                   // 早朝・深夜
+  return 10;                                  // 日中
+}
+(function generateTimetable(){
+  const RI  = reversePath(FULL.I);
+  const RN  = reversePath(FULL.N);
+  const RTY = reversePath(FULL.TY);
+  const N_fromHiyoshi   = sliceFrom(FULL.N, "日吉");
+  const N_fromShirokane = sliceFrom(FULL.N, "白金高輪");
+  const RN_toShirokane  = truncTo(RN, "白金高輪");
+  const RTY_fromDen     = sliceFrom(RTY, "田園調布");
+  let t = 5*60;
+  while(t < 23*60+30){
+    /* ── 上り(新横浜 → 都心) ── */
+    makeTrain(FULL.I,          t,    "exp","I", "西高島平","新横浜","nb");   // 三田線直通 急行
+    makeTrain(FULL.N,          t+4,  "loc","N", "赤羽岩淵","新横浜","nb");   // 南北線直通 各停
+    makeTrain(FULL.TY,         t+7,  "loc","TY","渋谷",    "新横浜","nb");   // 東横線直通(並走区間のみ利用可)
+    makeTrain(N_fromHiyoshi,   t+15, "exp","N", "赤羽岩淵","日吉","nb");     // 日吉始発 急行
+    makeTrain(N_fromShirokane, t+29, "loc","N", "赤羽岩淵","白金高輪","nb"); // 白金高輪始発(三田線急行から対面接続)
+    /* ── 下り(都心 → 新横浜) ── */
+    makeTrain(RI,              t,    "exp","I", "新横浜",  "西高島平","sb"); // 三田線から新横浜行き 急行
+    makeTrain(RN,              t+4,  "loc","N", "新横浜",  "赤羽岩淵","sb"); // 南北線から新横浜行き 各停
+    makeTrain(RN_toShirokane,  t+7,  "loc","N", "白金高輪","赤羽岩淵","sb"); // 白金高輪止まり(三田線新横浜行きへ対面接続)
+    makeTrain(RTY_fromDen,     t+9,  "loc","TY","新横浜",  "渋谷",  "sb");   // 東横線から新横浜線直通
+    t += headway(t);
+  }
+  /* 駅別発車インデックスを構築 */
+  TRAINS.forEach(tr=>{
+    tr.stops.forEach(([n,tm],i)=>{
+      if(i===tr.stops.length-1) return; // 終着駅からは乗れない
+      if(!stationDeps.has(n)) stationDeps.set(n, []);
+      stationDeps.get(n).push([tm, tr, i]);
+    });
+  });
+  stationDeps.forEach(list=>list.sort((a,b)=>a[0]-b[0]));
+})();
+
+/* ═════════ 探索エンジン ═════════ */
+const MAX_TRANSFERS = 2;
+const WAIT_CAP = 30; // 乗り換え待ち上限(分)
+
+function bestArrival(train, idx, to, left, memo){
+  const key = train.id+"@"+idx+"#"+left;
+  if(memo.has(key)) return memo.get(key);
+  let best = null;
+  const st = train.stops;
+  for(let j=idx+1; j<st.length; j++){
+    const n = st[j][0], tm = st[j][1];
+    if(n===to){ // このまま乗って到着
+      if(!best || tm < best.arr) best = { arr:tm, chain:[{t:train, bi:idx, ai:j}] };
+      break; // 目的駅より先の乗換は無意味
+    }
+    if(left>0 && TRANSFER.has(n)){
+      const deps = stationDeps.get(n) || [];
+      for(const [d2, u, k] of deps){
+        if(d2 < tm) continue;          // 対面乗り換え0分: 到着時刻以降の発車に乗れる
+        if(d2 > tm + WAIT_CAP) break;  // 待ち時間上限
+        if(u === train) continue;
+        const r = bestArrival(u, k, to, left-1, memo);
+        if(r && (!best || r.arr < best.arr)){
+          best = { arr:r.arr, chain:[{t:train, bi:idx, ai:j}, ...r.chain] };
+        }
+      }
+    }
+  }
+  memo.set(key, best);
+  return best;
+}
+
+function fmt(m){
+  m = ((m % 1440) + 1440) % 1440;
+  return Math.floor(m/60) + ":" + String(m%60).padStart(2,"0");
+}
+function typeLabel(tr){ return tr.kind==="exp" ? "急行" : "各停"; }
+function descFor(tr){
+  if(tr.branch==="TY") return tr.dir==="nb" ? "東横線直通(渋谷方面)・並走区間で乗換可" : "東横線から新横浜線直通";
+  const via = tr.branch==="I" ? "三田線" : "南北線";
+  if(tr.origin==="白金高輪") return "白金高輪始発・座れる可能性大";
+  if(tr.origin==="日吉") return "日吉始発・目黒線→"+via+" 直通";
+  return (tr.dir==="nb" ? "新横浜線→目黒線→"+via : via+"→目黒線→新横浜線")+" 直通";
+}
+function stopSummary(leg){
+  const s = leg.t.stops;
+  const mid = [];
+  for(let i=leg.bi+1; i<leg.ai; i++) mid.push(s[i][0]);
+  if(mid.length===0) return "ノンストップ";
+  if(mid.length<=4) return mid.join("・");
+  return mid.slice(0,3).join("・") + " ほか" + (mid.length-3) + "駅";
+}
+function chainToLegs(chain){
+  const legs = [];
+  chain.forEach((leg, i)=>{
+    const s = leg.t.stops, bo = s[leg.bi], al = s[leg.ai];
+    if(i>0) legs.push({kind:"walk", note:"同じホームで対面乗り換え(0分)"});
+    legs.push({
+      kind:"ride",
+      line: stationLine(bo[0], leg.t),
+      type: typeLabel(leg.t)+" "+leg.t.dest+"行",
+      desc: descFor(leg.t),
+      from: bo[0], dep: fmt(bo[1]),
+      to: al[0],  arr: fmt(al[1]),
+      stops: stopSummary(leg)
+    });
+  });
+  return legs;
+}
+
+function findCandidates(from, to, nowMin){
+  const deps = (stationDeps.get(from) || []).filter(d=>d[0] >= nowMin);
+  const out = [];
+  for(const [d, tr, idx] of deps){
+    if(out.length >= 5) break;
+    if(out.length >= 3 && d > nowMin + 90) break;
+    const r = bestArrival(tr, idx, to, MAX_TRANSFERS, new Map());
+    if(!r) continue;
+    out.push({ depMin:d, arrMin:r.arr, chain:r.chain, train:tr });
+  }
+  if(out.length===0) return [];
+  const minArr = Math.min(...out.map(c=>c.arrMin));
+  /* 最速判定: 同着なら乗り換え回数が少ない候補、さらに同数なら先発を推す */
+  const bestIdx = out.reduce((bi, c, i)=>{
+    if(c.arrMin !== minArr) return bi;
+    if(bi === -1) return i;
+    const b = out[bi];
+    const ct = c.chain.length, bt = b.chain.length;
+    if(ct < bt) return i;
+    if(ct === bt && c.depMin < b.depMin) return i;
+    return bi;
+  }, -1);
+  return out.map((c, i)=>{
+    const fastest = i === bestIdx;
+    /* 最速候補向けの補足: 乗換なし直通と比べ何分速いか */
+    let note;
+    if(fastest){
+      const direct = out.find(o=>o!==c && o.chain.length===1);
+      note = (direct && direct.arrMin > c.arrMin)
+        ? "乗り換えなしの直通より "+(direct.arrMin - c.arrMin)+"分 早く着きます"
+        : "この時間帯の最速ルートです";
+    }else{
+      note = "最速より +"+(c.arrMin - minArr)+"分";
+    }
+    return {
+      dep: fmt(c.depMin), arr: fmt(c.arrMin),
+      depMin: c.depMin, arrMin: c.arrMin,
+      dur: c.arrMin - c.depMin,
+      tr: c.chain.length - 1,
+      wait: c.depMin - nowMin,
+      line: stationLine(from, c.train),
+      type: typeLabel(c.train),
+      dest: c.train.dest + "行",
+      fastest, note,
+      legs: chainToLegs(c.chain)
+    };
+  });
+}
+
+/* ═════════ 状態・永続化 ═════════ */
+const STORAGE_KEY = "doretore.state.v2"; // データモデル刷新のためバージョンアップ
 function loadPersisted(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
     if(!raw) return null;
-    const parsed = JSON.parse(raw);
-    if(parsed && Array.isArray(parsed.routes)) return parsed;
-    return null;
+    const p = JSON.parse(raw);
+    if(!p || !Array.isArray(p.routes)) return null;
+    p.routes = p.routes
+      .map(r=>({from:r.from, to:r.to}))
+      .filter(r=>STATIONS.includes(r.from) && STATIONS.includes(r.to) && r.from!==r.to);
+    return p;
   }catch(e){
     console.warn("どれトレ: 保存データの読み込みに失敗しました", e);
     return null;
@@ -459,131 +693,36 @@ function loadPersisted(){
 function persist(){
   try{
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      routes: state.routes,
-      selectedRoute: state.selectedRoute,
-      dark: state.dark
+      routes: state.routes, selectedRoute: state.selectedRoute, dark: state.dark
     }));
   }catch(e){
-    // プライベートブラウズ等で書き込めない場合もアプリを止めない
     console.warn("どれトレ: 保存データの書き込みに失敗しました", e);
   }
 }
 
 let state = {
-  dark:false,
-  editing:false,
-  selectedRoute:0,
-  pendingDelete:null,
+  dark:false, editing:false, selectedRoute:0, pendingDelete:null,
   pickFrom:null, pickTo:null,
-  routes:[
-    {
-      from:"新横浜", to:"飯田橋",
-      cands:[
-        {
-          dep:"9:44", arr:"10:29", dur:45, tr:1, wait:3, fastest:true,
-          line:"SH", type:"急行", dest:"西高島平行（三田線直通）",
-          note:"南北線直通 9:49発 より 7分 早く着きます",
-          legs:[
-            {kind:"ride", line:"SH", type:"急行 西高島平行",
-             desc:"新横浜線→目黒線→三田線 直通", from:"新横浜", dep:"9:44", to:"白金高輪", arr:"10:12", stops:"新綱島・日吉・武蔵小杉・大岡山・目黒 ほか"},
-            {kind:"walk", min:2, note:"同じホームの向かい側に乗り換え（2分）"},
-            {kind:"ride", line:"N", type:"各駅停車 浦和美園行",
-             desc:"白金高輪始発 · 座れる可能性大", from:"白金高輪", dep:"10:14", to:"飯田橋", arr:"10:29", stops:"麻布十番・六本木一丁目・永田町・市ケ谷"}
-          ]
-        },
-        {
-          dep:"9:46", arr:"10:33", dur:47, tr:2, wait:5,
-          line:"TY", type:"各停", dest:"和光市行（東横線直通）",
-          note:"日吉で後続の急行に乗り換えるパターン",
-          legs:[
-            {kind:"ride", line:"TY", type:"各駅停車 和光市行",
-             desc:"新横浜線→東横線 直通", from:"新横浜", dep:"9:46", to:"日吉", arr:"9:52", stops:"新綱島"},
-            {kind:"walk", min:1, note:"同じホームで待つだけ（1分）"},
-            {kind:"ride", line:"I", type:"急行 高島平行",
-             desc:"目黒線→三田線 直通", from:"日吉", dep:"9:54", to:"白金高輪", arr:"10:18", stops:"武蔵小杉・大岡山・目黒"},
-            {kind:"walk", min:2, note:"同じホームの向かい側に乗り換え（2分）"},
-            {kind:"ride", line:"N", type:"各駅停車 赤羽岩淵行",
-             desc:"白金高輪始発", from:"白金高輪", dep:"10:20", to:"飯田橋", arr:"10:33", stops:"麻布十番・永田町・市ケ谷 ほか"}
-          ]
-        },
-        {
-          dep:"9:49", arr:"10:36", dur:47, tr:0, wait:8,
-          line:"MG", type:"急行", dest:"浦和美園行（南北線直通）",
-          note:"乗り換えなし。ただし到着は最速より7分遅い",
-          legs:[
-            {kind:"ride", line:"N", type:"急行 浦和美園行",
-             desc:"新横浜線→目黒線→南北線 直通 · 乗り換えなし", from:"新横浜", dep:"9:49", to:"飯田橋", arr:"10:36", stops:"日吉・武蔵小杉・目黒・白金高輪・永田町 ほか"}
-          ]
-        }
-      ]
-    },
-    {
-      from:"武蔵小杉", to:"渋谷",
-      cands:[
-        {
-          dep:"9:43", arr:"9:56", dur:13, tr:0, wait:2, fastest:true,
-          line:"TY", type:"Fライナー特急", dest:"小手指行",
-          note:"次発の急行より 5分 早く着きます",
-          legs:[
-            {kind:"ride", line:"TY", type:"Fライナー特急 小手指行",
-             desc:"副都心線直通 · 停車駅少なめ", from:"武蔵小杉", dep:"9:43", to:"渋谷", arr:"9:56", stops:"自由が丘・中目黒"}
-          ]
-        },
-        {
-          dep:"9:46", arr:"10:01", dur:15, tr:0, wait:5,
-          line:"TY", type:"急行", dest:"和光市行",
-          note:"特急に間に合わない場合はこちら",
-          legs:[
-            {kind:"ride", line:"TY", type:"急行 和光市行",
-             desc:"副都心線直通", from:"武蔵小杉", dep:"9:46", to:"渋谷", arr:"10:01", stops:"自由が丘・学芸大学・中目黒・代官山"}
-          ]
-        },
-        {
-          dep:"9:48", arr:"10:07", dur:19, tr:0, wait:7,
-          line:"TY", type:"各停", dest:"渋谷行",
-          note:"各駅停車。座りたいときに",
-          legs:[
-            {kind:"ride", line:"TY", type:"各駅停車 渋谷行",
-             desc:"全駅に停車", from:"武蔵小杉", dep:"9:48", to:"渋谷", arr:"10:07", stops:"元住吉〜代官山 の各駅"}
-          ]
-        }
-      ]
-    }
+  currentCands: [],
+  routes: [
+    {from:"新横浜", to:"飯田橋"},
+    {from:"飯田橋", to:"新横浜"}
   ]
 };
 
-/* ───────── helpers ───────── */
+/* ═════════ helpers ═════════ */
 const $ = id => document.getElementById(id);
 function badge(line, size){
   const l = LINES[line];
   return '<div class="badge" style="background:'+l.c+';'+(size?'width:'+size+'px;height:'+size+'px;':'')+'">'+l.s+'</div>';
 }
-function flashCell(el){ /* visual feedback only for stub cells */ }
-
-/* generate plausible candidates for user-created routes */
-function makeCands(from, to){
-  const base = [[44,1,"急行"],[47,2,"各停"],[51,0,"急行"]];
-  const durBase = 18 + Math.abs(STATIONS.indexOf(from) - STATIONS.indexOf(to)) * 4;
-  return base.map((b,i)=>{
-    const dep = "9:" + b[0];
-    const dur = durBase + i*3 + (b[1]===0 ? 4 : 0);
-    const arrMin = b[0] + dur;
-    const arr = (9 + Math.floor(arrMin/60)) + ":" + String(arrMin%60).padStart(2,"0");
-    const legs = b[1] === 0
-      ? [{kind:"ride", line:"MG", type:b[2]+" 直通", desc:"乗り換えなし", from, dep, to, arr, stops:"途中主要駅に停車"}]
-      : [
-          {kind:"ride", line:"TY", type:b[2]+" 直通", desc:"まずはこの電車で先行", from, dep, to:"日吉", arr:"9:"+(b[0]+6), stops:"途中各駅"},
-          {kind:"walk", min:2, note:"同じホームで乗り換え（2分）"},
-          {kind:"ride", line:"MG", type:"急行", desc:"後続の速達に乗り換え", from:"日吉", dep:"9:"+(b[0]+8), to, arr, stops:"主要駅のみ停車"}
-        ];
-    return {dep, arr, dur, tr:b[1], wait:i*3+3, fastest:i===0,
-            line:legs[0].line, type:b[2], dest: legs[0].type,
-            note: i===0 ? "この時間帯の最速パターンです" : "最速より "+(i*3+(b[1]===0?4:0))+"分 遅く到着",
-            legs};
-  });
+function flashCell(el){}
+function nowMinutes(){
+  const d = new Date();
+  return d.getHours()*60 + d.getMinutes();
 }
 
-/* ───────── render: home ───────── */
+/* ═════════ render: home ═════════ */
 function renderHome(){
   const c = $("home-content");
   if(state.routes.length === 0){
@@ -598,7 +737,11 @@ function renderHome(){
   }
   if(state.selectedRoute >= state.routes.length) state.selectedRoute = 0;
   const r = state.routes[state.selectedRoute];
-  const best = r.cands.find(x=>x.fastest) || r.cands[0];
+  let now = nowMinutes();
+  let cands = findCandidates(r.from, r.to, now);
+  let tomorrow = false;
+  if(cands.length===0){ cands = findCandidates(r.from, r.to, 5*60); tomorrow = true; }
+  state.currentCands = cands;
 
   let html = '<div class="chips">';
   state.routes.forEach((rt,i)=>{
@@ -606,22 +749,29 @@ function renderHome(){
   });
   html += '</div>';
 
+  if(cands.length===0){
+    html += '<div class="empty"><h3>経路が見つかりません</h3><p>この2駅間はネットワーク対象外の可能性があります。</p></div>';
+    c.innerHTML = html; return;
+  }
+
+  const best = cands.find(x=>x.fastest) || cands[0];
+  const bi = cands.indexOf(best);
   html +=
-    '<div class="hero" onclick="openDetail('+state.selectedRoute+','+r.cands.indexOf(best)+')">'+
+    '<div class="hero" onclick="openDetail('+bi+')">'+
       '<div class="pill">最速</div>'+
-      '<div class="eyebrow">'+r.from+' → '+r.to+'　次に乗るべき電車</div>'+
-      '<div class="dep">'+best.dep+'<small> 発（あと'+best.wait+'分）</small></div>'+
+      '<div class="eyebrow">'+r.from+' → '+r.to+'　次に乗るべき電車'+(tomorrow?'(明朝)':'')+'</div>'+
+      '<div class="dep">'+best.dep+'<small> 発'+(tomorrow?'':'(あと'+best.wait+'分)')+'</small></div>'+
       '<div class="train">'+badge(best.line,22)+best.type+' '+best.dest+'</div>'+
       '<div class="meta"><span>到着 '+best.arr+'</span><span>所要 '+best.dur+'分</span><span>乗り換え '+best.tr+'回</span></div>'+
       '<div class="save">'+best.note+'</div>'+
     '</div>';
 
   html += '<div class="section-header">発車順にくらべる</div><div class="group">';
-  r.cands.forEach((cd,i)=>{
+  cands.forEach((cd,i)=>{
     const diff = cd.fastest ? '<span class="fast">最速</span>'
-      : '<span class="late">+'+(toMin(cd.arr)-toMin(best.arr))+'分</span>';
+      : '<span class="late">+'+(cd.arrMin-best.arrMin)+'分</span>';
     html +=
-      '<div class="cell" onclick="openDetail('+state.selectedRoute+','+i+')">'+
+      '<div class="cell" onclick="openDetail('+i+')">'+
         '<div class="cand-time">'+cd.dep+'</div>'+
         badge(cd.line)+
         '<div class="main"><div class="title" style="font-size:15px;font-weight:600;">'+cd.type+' '+cd.dest+'</div>'+
@@ -631,13 +781,12 @@ function renderHome(){
       '</div>';
   });
   html += '</div>';
-  html += '<p class="caption" style="padding:14px 4px;">9:41 現在の時刻表に基づく案内（デモデータ）。遅延は反映されません。</p>';
+  html += '<p class="caption" style="padding:14px 4px;">'+(tomorrow?'本日の運行は終了しています(明朝5時台以降を表示)。':fmt(now)+' 現在のダイヤに基づく案内。')+'時刻はデモ用の生成データです。</p>';
   c.innerHTML = html;
 }
-function toMin(t){ const p=t.split(":"); return (+p[0])*60 + (+p[1]); }
 function selectRoute(i){ state.selectedRoute = i; persist(); renderHome(); }
 
-/* ───────── render: routes ───────── */
+/* ═════════ render: routes ═════════ */
 function renderRoutes(){
   const c = $("routes-content");
   if(state.routes.length === 0){
@@ -651,15 +800,19 @@ function renderRoutes(){
       '</div>';
     return;
   }
+  const now = nowMinutes();
   let html = '<div class="group'+(state.editing?' editing':'')+'">';
   state.routes.forEach((r,i)=>{
-    const best = r.cands.find(x=>x.fastest) || r.cands[0];
+    const cands = findCandidates(r.from, r.to, now);
+    const best = cands.find(x=>x.fastest);
+    const sub = best ? ("最速 "+best.dep+"発 · "+best.arr+"着("+best.dur+"分)") : "現在は運行時間外";
+    const line = best ? best.line : "MG";
     html +=
       '<div class="cell" onclick="goHomeWith('+i+')">'+
         '<button class="minus-btn" onclick="event.stopPropagation();askDelete('+i+')" aria-label="削除">−</button>'+
-        badge(best.line)+
+        badge(line)+
         '<div class="main"><div class="title">'+r.from+' → '+r.to+'</div>'+
-        '<div class="sub">最速 '+best.dep+'発 · '+best.arr+'着（'+best.dur+'分）</div></div>'+
+        '<div class="sub">'+sub+'</div></div>'+
         '<div class="chevron">›</div>'+
       '</div>';
   });
@@ -670,6 +823,7 @@ function renderRoutes(){
 function goHomeWith(i){
   if(state.editing) return;
   state.selectedRoute = i;
+  persist();
   renderHome();
   switchTab("home");
 }
@@ -697,9 +851,11 @@ function confirmDelete(){
   renderRoutes(); renderHome();
 }
 
-/* ───────── detail (push) ───────── */
-function openDetail(ri, ci){
-  const r = state.routes[ri], cd = r.cands[ci];
+/* ═════════ detail (push) ═════════ */
+function openDetail(ci){
+  const cd = state.currentCands[ci];
+  if(!cd) return;
+  const r = state.routes[state.selectedRoute];
   $("detail-title").textContent = cd.dep + "発 · " + r.from + " → " + r.to;
   let html =
     '<div class="summary-grid">'+
@@ -737,7 +893,7 @@ function openDetail(ri, ci){
     }
   });
   html += '</div>';
-  html += '<p class="caption" style="padding:14px 4px 8px;">白金高輪始発の南北線は同一ホーム乗り換え。階段の移動はありません。</p>';
+  html += '<p class="caption" style="padding:14px 4px 8px;">日吉〜田園調布間の各駅と白金高輪では、同じホームの向かい側で乗り換えできます。</p>';
   $("detail-content").innerHTML = html;
   $("detail-content").scrollTop = 0;
   $("page-detail").classList.add("open");
@@ -748,7 +904,7 @@ function closeDetail(){
   $("tabsHolder").classList.remove("pushed");
 }
 
-/* ───────── tabs ───────── */
+/* ═════════ tabs ═════════ */
 function switchTab(name){
   closeDetail();
   ["home","routes","settings"].forEach(t=>{
@@ -757,7 +913,7 @@ function switchTab(name){
   });
 }
 
-/* ───────── sheet ───────── */
+/* ═════════ sheet ═════════ */
 function buildPickers(){
   ["from","to"].forEach(which=>{
     const el = $("picker-"+which);
@@ -800,7 +956,7 @@ function closeSheet(){
 function saveRoute(){
   const exists = state.routes.some(r=>r.from===state.pickFrom && r.to===state.pickTo);
   if(!exists){
-    state.routes.push({from:state.pickFrom, to:state.pickTo, cands:makeCands(state.pickFrom, state.pickTo)});
+    state.routes.push({from:state.pickFrom, to:state.pickTo});
     state.selectedRoute = state.routes.length - 1;
     persist();
   }
@@ -808,29 +964,28 @@ function saveRoute(){
   renderRoutes(); renderHome();
 }
 
-/* ───────── dark mode ───────── */
+/* ═════════ dark mode ═════════ */
 function setDark(on){
   state.dark = on;
   $("screen").classList.toggle("dark", on);
   persist();
 }
 
-/* ───────── large-title collapse ───────── */
+/* ═════════ large-title collapse ═════════ */
 [["home-content","nav-home"],["routes-content","nav-routes"],["settings-content","nav-settings"]].forEach(([cid,nid])=>{
   $(cid).addEventListener("scroll", e=>{
     $(nid).classList.toggle("collapsed", e.target.scrollTop > 26);
   });
 });
 
-/* ───────── init ───────── */
+/* ═════════ init ═════════ */
 (function initFromStorage(){
   const saved = loadPersisted();
   if(saved){
-    state.routes = saved.routes;
+    if(saved.routes.length) state.routes = saved.routes;
     state.selectedRoute = saved.selectedRoute || 0;
     state.dark = !!saved.dark;
   }else{
-    // 初回起動: 同梱のサンプル経路をそのまま保存し、次回以降はそれを読み込む
     persist();
   }
   $("screen").classList.toggle("dark", state.dark);
@@ -840,7 +995,10 @@ buildPickers();
 renderHome();
 renderRoutes();
 
-/* ───────── service worker registration (PWA offline support) ───────── */
+/* 1分ごとに案内を自動更新(実時刻に追従) */
+setInterval(()=>{ renderHome(); }, 60*1000);
+
+/* ═════════ service worker registration ═════════ */
 if("serviceWorker" in navigator){
   window.addEventListener("load", ()=>{
     navigator.serviceWorker.register("./sw.js")
