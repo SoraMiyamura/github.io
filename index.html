@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>どれトレ — iOS Prototype</title>
+<style>
+  :root{
+    --blue:#007AFF; --green:#34C759; --red:#FF3B30; --orange:#FF9500; --gray:#8E8E93;
+    --tint:#DA0442; /* 東急東横線レッドをtintに */
+    --ty:#DA0442; --mg:#009CD2; --sh:#8F76D6; --mita:#0079C2; --nam:#00AC9A; --fuku:#9C5E31;
+  }
+  .screen{
+    --bg:#F2F2F7; --card:#FFFFFF; --label:#000000; --label2:rgba(60,60,67,0.6);
+    --label3:rgba(60,60,67,0.3); --sep:rgba(60,60,67,0.29); --fill:rgba(120,120,128,0.16);
+    --navblur:rgba(249,249,249,0.82); --tabblur:rgba(249,249,249,0.82);
+    --heroTop:#B4003A; --heroBottom:#DA0442;
+  }
+  .screen.dark{
+    --bg:#000000; --card:#1C1C1E; --label:#FFFFFF; --label2:rgba(235,235,245,0.6);
+    --label3:rgba(235,235,245,0.3); --sep:rgba(84,84,88,0.65); --fill:rgba(120,120,128,0.32);
+    --navblur:rgba(29,29,31,0.78); --tabblur:rgba(29,29,31,0.78);
+    --heroTop:#7A0025; --heroBottom:#B4003A;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Hiragino Sans","Hiragino Kaku Gothic ProN",sans-serif;
+    background:linear-gradient(160deg,#1b1b21 0%,#2a2a33 100%);
+    display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;
+    letter-spacing:-0.2px;
+  }
+  /* ── iPhone 15 Pro frame ── */
+  .phone{
+    width:393px;height:852px;border-radius:55px;position:relative;flex:none;
+    background:#000;box-shadow:0 0 0 3px #3a3a3f,0 0 0 5px #17171a,0 30px 80px rgba(0,0,0,0.6);
+    overflow:hidden;
+  }
+  .screen{
+    position:absolute;inset:3px;border-radius:52px;overflow:hidden;background:var(--bg);
+    color:var(--label);transition:background 0.3s;
+  }
+  .island{
+    position:absolute;top:11px;left:50%;transform:translateX(-50%);
+    width:125px;height:36px;background:#000;border-radius:20px;z-index:60;
+  }
+  .statusbar{
+    position:absolute;top:0;left:0;right:0;height:59px;z-index:55;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:18px 32px 0 40px;pointer-events:none;
+  }
+  .statusbar .time{font-size:16px;font-weight:600;letter-spacing:-0.3px;}
+  .statusbar svg{display:block;}
+  .statusbar .sicons{display:flex;align-items:center;gap:7px;}
+  .home-indicator{
+    position:absolute;bottom:8px;left:50%;transform:translateX(-50%);
+    width:140px;height:5px;border-radius:3px;background:var(--label);opacity:0.3;z-index:60;
+  }
+  /* ── page layout ── */
+  .viewport{position:absolute;inset:0;overflow:hidden;}
+  .tabs-holder{position:absolute;inset:0;transition:transform 0.35s cubic-bezier(0.25,0.1,0.25,1);}
+  .tabs-holder.pushed{transform:translateX(-30%);}
+  .page{position:absolute;inset:0;display:none;flex-direction:column;}
+  .page.active{display:flex;}
+  .content{
+    flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+    padding:156px 16px 110px;scrollbar-width:none;
+  }
+  .content::-webkit-scrollbar{display:none;}
+  /* ── navigation bar ── */
+  .nav{
+    position:absolute;top:0;left:0;right:0;z-index:40;padding-top:59px;
+    background:transparent;transition:background 0.25s;
+  }
+  .nav .bar{
+    height:44px;display:flex;align-items:center;justify-content:center;position:relative;padding:0 16px;
+  }
+  .nav .small-title{font-size:17px;font-weight:600;opacity:0;transition:opacity 0.2s;}
+  .nav .large{padding:0 16px 8px;}
+  .nav .large h1{font-size:34px;font-weight:700;letter-spacing:0.2px;transition:opacity 0.15s;}
+  .nav.collapsed{background:var(--navblur);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);box-shadow:0 0.5px 0 var(--sep);}
+  .nav.collapsed .small-title{opacity:1;}
+  .nav.collapsed .large{display:none;}
+  .nav .trailing{position:absolute;right:16px;top:0;height:44px;display:flex;align-items:center;}
+  .nav .leading{position:absolute;left:8px;top:0;height:44px;display:flex;align-items:center;}
+  .nav-btn{
+    border:none;background:none;color:var(--tint);font-size:17px;font-family:inherit;
+    display:flex;align-items:center;gap:2px;cursor:pointer;padding:6px 8px;
+  }
+  .nav-btn:active{opacity:0.4;}
+  .back-chev{font-size:26px;font-weight:500;line-height:1;margin-top:-3px;}
+  /* detail page (push) */
+  .push-page{
+    position:absolute;inset:0;z-index:45;background:var(--bg);display:flex;flex-direction:column;
+    transform:translateX(100%);transition:transform 0.35s cubic-bezier(0.25,0.1,0.25,1);
+    box-shadow:-8px 0 24px rgba(0,0,0,0.18);
+  }
+  .push-page.open{transform:translateX(0);}
+  .push-page .nav{padding-top:59px;}
+  /* ── typography helpers ── */
+  .footnote{font-size:13px;color:var(--label2);}
+  .caption{font-size:12px;color:var(--label2);}
+  .section-header{
+    font-size:13px;color:var(--label2);text-transform:none;
+    padding:20px 16px 7px;letter-spacing:-0.1px;
+  }
+  /* ── inset grouped list ── */
+  .group{background:var(--card);border-radius:10px;overflow:hidden;}
+  .cell{
+    display:flex;align-items:center;min-height:44px;padding:11px 16px;gap:12px;
+    position:relative;cursor:pointer;
+  }
+  .cell:active{background:var(--fill);}
+  .cell.static{cursor:default;}
+  .cell.static:active{background:none;}
+  .cell+.cell::before{
+    content:"";position:absolute;top:0;left:16px;right:0;height:0.5px;background:var(--sep);
+  }
+  .cell .main{flex:1;min-width:0;}
+  .cell .title{font-size:17px;}
+  .cell .sub{font-size:13px;color:var(--label2);margin-top:1px;}
+  .chevron{color:var(--label3);font-size:17px;font-weight:600;flex:none;}
+  .check{color:var(--tint);font-weight:600;font-size:17px;flex:none;visibility:hidden;}
+  .cell.selected .check{visibility:visible;}
+  .minus-btn{
+    width:22px;height:22px;border-radius:50%;background:var(--red);color:#fff;border:none;
+    font-size:16px;font-weight:700;line-height:1;flex:none;display:none;align-items:center;justify-content:center;cursor:pointer;
+  }
+  .editing .minus-btn{display:flex;}
+  /* line badge */
+  .badge{
+    width:26px;height:26px;border-radius:50%;flex:none;color:#fff;font-weight:700;font-size:11px;
+    display:flex;align-items:center;justify-content:center;letter-spacing:0;
+  }
+  /* ── hero card ── */
+  .hero{
+    border-radius:16px;padding:18px;color:#fff;position:relative;overflow:hidden;cursor:pointer;
+    background:linear-gradient(150deg,var(--heroTop),var(--heroBottom));
+    box-shadow:0 8px 24px rgba(218,4,66,0.28);transition:transform 0.2s;
+  }
+  .hero:active{transform:scale(0.98);}
+  .hero .eyebrow{font-size:12px;font-weight:600;opacity:0.85;letter-spacing:0.4px;}
+  .hero .dep{font-size:40px;font-weight:800;letter-spacing:-1px;margin-top:4px;line-height:1.05;}
+  .hero .dep small{font-size:17px;font-weight:600;opacity:0.9;letter-spacing:-0.2px;}
+  .hero .train{font-size:15px;font-weight:600;margin-top:6px;display:flex;align-items:center;gap:7px;}
+  .hero .meta{margin-top:12px;display:flex;gap:14px;font-size:13px;opacity:0.92;}
+  .hero .pill{
+    position:absolute;top:16px;right:16px;background:rgba(255,255,255,0.24);border-radius:20px;
+    padding:4px 10px;font-size:12px;font-weight:700;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);
+  }
+  .hero .save{margin-top:10px;font-size:13px;font-weight:600;background:rgba(0,0,0,0.18);display:inline-block;padding:5px 10px;border-radius:8px;}
+  /* candidate rows */
+  .cand-time{font-size:20px;font-weight:700;width:58px;flex:none;font-variant-numeric:tabular-nums;}
+  .arr-tag{font-size:13px;font-weight:600;flex:none;text-align:right;}
+  .arr-tag .fast{color:var(--green);}
+  .arr-tag .late{color:var(--label2);}
+  .arr-tag .big{font-size:15px;color:var(--label);font-variant-numeric:tabular-nums;}
+  /* route chips */
+  .chips{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 12px;scrollbar-width:none;}
+  .chips::-webkit-scrollbar{display:none;}
+  .chip{
+    flex:none;border:none;font-family:inherit;font-size:14px;font-weight:600;padding:7px 14px;
+    border-radius:20px;background:var(--fill);color:var(--label);cursor:pointer;
+  }
+  .chip.on{background:var(--tint);color:#fff;}
+  .chip:active{opacity:0.6;}
+  /* ── buttons ── */
+  .btn-filled{
+    display:block;width:100%;border:none;background:var(--tint);color:#fff;font-family:inherit;
+    font-size:17px;font-weight:600;padding:14px;border-radius:12px;cursor:pointer;
+  }
+  .btn-filled:disabled{background:var(--fill);color:var(--label3);}
+  .btn-filled:active:not(:disabled){opacity:0.4;}
+  .btn-tinted{
+    display:inline-block;border:none;background:rgba(218,4,66,0.14);color:var(--tint);
+    font-family:inherit;font-size:15px;font-weight:600;padding:8px 16px;border-radius:20px;cursor:pointer;
+  }
+  .btn-tinted:active{opacity:0.4;}
+  /* ── switch ── */
+  .sw{position:relative;width:51px;height:31px;flex:none;}
+  .sw input{opacity:0;width:100%;height:100%;position:absolute;margin:0;cursor:pointer;z-index:2;}
+  .sw .track{
+    position:absolute;inset:0;border-radius:16px;background:var(--fill);transition:background 0.25s;
+  }
+  .sw input:checked+.track{background:var(--green);}
+  .sw .knob{
+    position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;
+    box-shadow:0 2px 5px rgba(0,0,0,0.25);transition:transform 0.25s cubic-bezier(0.3,1.3,0.5,1);pointer-events:none;
+  }
+  .sw input:checked~.knob{transform:translateX(20px);}
+  /* ── tab bar ── */
+  .tabbar{
+    position:absolute;bottom:0;left:0;right:0;height:83px;z-index:50;
+    background:var(--tabblur);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);
+    box-shadow:0 -0.5px 0 var(--sep);display:flex;padding-top:6px;
+  }
+  .tab{
+    flex:1;border:none;background:none;font-family:inherit;cursor:pointer;
+    display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--gray);padding-top:2px;
+  }
+  .tab span{font-size:10px;font-weight:500;}
+  .tab.on{color:var(--tint);}
+  .tab:active{opacity:0.6;}
+  /* ── sheet ── */
+  .dim{
+    position:absolute;inset:0;background:rgba(0,0,0,0.4);z-index:70;opacity:0;
+    pointer-events:none;transition:opacity 0.3s;
+  }
+  .dim.show{opacity:1;pointer-events:auto;}
+  .sheet{
+    position:absolute;left:0;right:0;bottom:0;top:64px;z-index:75;background:var(--bg);
+    border-radius:16px 16px 0 0;transform:translateY(105%);
+    transition:transform 0.4s cubic-bezier(0.25,0.1,0.25,1);display:flex;flex-direction:column;
+    box-shadow:0 -10px 40px rgba(0,0,0,0.3);
+  }
+  .sheet.show{transform:translateY(0);}
+  .grabber{width:36px;height:5px;border-radius:3px;background:var(--label3);margin:8px auto 0;}
+  .sheet-head{display:flex;align-items:center;justify-content:space-between;padding:10px 16px 4px;}
+  .sheet-head h2{font-size:17px;font-weight:600;}
+  .sheet-body{flex:1;overflow-y:auto;padding:8px 16px 40px;scrollbar-width:none;}
+  .sheet-body::-webkit-scrollbar{display:none;}
+  .picker-list{max-height:0;overflow:hidden;transition:max-height 0.3s ease;}
+  .picker-list.open{max-height:600px;overflow-y:auto;}
+  /* ── alert ── */
+  .alert-wrap{
+    position:absolute;inset:0;z-index:90;display:none;align-items:center;justify-content:center;
+    background:rgba(0,0,0,0.4);
+  }
+  .alert-wrap.show{display:flex;}
+  .alert{
+    width:270px;border-radius:14px;background:var(--navblur);
+    -webkit-backdrop-filter:blur(30px);backdrop-filter:blur(30px);
+    overflow:hidden;text-align:center;animation:alertIn 0.25s cubic-bezier(0.3,1.4,0.5,1);
+  }
+  @keyframes alertIn{from{transform:scale(1.15);opacity:0;}to{transform:scale(1);opacity:1;}}
+  .alert .a-body{padding:19px 16px 15px;}
+  .alert .a-title{font-size:17px;font-weight:600;}
+  .alert .a-msg{font-size:13px;margin-top:4px;color:var(--label);}
+  .alert .a-btns{display:flex;border-top:0.5px solid var(--sep);}
+  .alert .a-btns button{
+    flex:1;border:none;background:none;font-family:inherit;font-size:17px;padding:11px;
+    color:var(--blue);cursor:pointer;
+  }
+  .alert .a-btns button+button{border-left:0.5px solid var(--sep);}
+  .alert .a-btns .destructive{color:var(--red);font-weight:400;}
+  .alert .a-btns .bold{font-weight:600;}
+  .alert .a-btns button:active{background:var(--fill);}
+  /* ── timeline (detail) ── */
+  .timeline{background:var(--card);border-radius:10px;padding:16px;}
+  .tl-row{display:flex;gap:12px;}
+  .tl-line{width:26px;flex:none;display:flex;flex-direction:column;align-items:center;}
+  .tl-dot{width:12px;height:12px;border-radius:50%;border:3px solid var(--tint);background:var(--card);flex:none;z-index:1;}
+  .tl-bar{width:6px;flex:1;border-radius:3px;min-height:36px;}
+  .tl-bar.walk{width:0;border-left:3px dotted var(--label3);border-radius:0;}
+  .tl-station{font-size:17px;font-weight:600;}
+  .tl-time{font-size:13px;color:var(--label2);font-variant-numeric:tabular-nums;}
+  .tl-train{padding:8px 0 14px;font-size:14px;}
+  .tl-train .name{font-weight:600;display:flex;align-items:center;gap:6px;}
+  .tl-train .note{font-size:12px;color:var(--label2);margin-top:3px;}
+  .summary-grid{display:flex;gap:8px;margin-bottom:16px;}
+  .sum-card{flex:1;background:var(--card);border-radius:12px;padding:12px;text-align:center;}
+  .sum-card .v{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;}
+  .sum-card .k{font-size:11px;color:var(--label2);margin-top:2px;}
+  /* empty state */
+  .empty{
+    text-align:center;padding:70px 24px 30px;color:var(--label2);
+  }
+  .empty .icon{margin-bottom:14px;color:var(--label3);}
+  .empty h3{font-size:20px;font-weight:700;color:var(--label);margin-bottom:6px;}
+  .empty p{font-size:15px;line-height:1.5;margin-bottom:18px;}
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{transition:none!important;animation:none!important;}
+  }
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="screen" id="screen">
+    <div class="statusbar">
+      <div class="time">9:41</div>
+      <div class="sicons">
+        <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0.5" width="3" height="11.5" rx="1"/></svg>
+        <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor"><path d="M8.5 12 L5.6 8.9 a4.1 4.1 0 0 1 5.8 0 Z"/><path d="M3.5 6.6 a7.3 7.3 0 0 1 10 0 L12 8.2 a5.1 5.1 0 0 0-7 0 Z" opacity="0.95"/><path d="M1.2 4.2 a10.6 10.6 0 0 1 14.6 0 L14.3 5.8 a8.4 8.4 0 0 0-11.6 0 Z" opacity="0.95"/></svg>
+        <svg width="27" height="13" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="22" height="12" rx="3.5" fill="none" stroke="currentColor" opacity="0.4"/><rect x="24" y="4" width="2.5" height="5" rx="1.2" fill="currentColor" opacity="0.4"/><rect x="2" y="2" width="19" height="9" rx="2" fill="currentColor"/></svg>
+      </div>
+    </div>
+    <div class="island"></div>
+
+    <div class="viewport">
+      <div class="tabs-holder" id="tabsHolder">
+
+        <!-- ── HOME ── -->
+        <div class="page active" id="page-home">
+          <div class="nav" id="nav-home">
+            <div class="bar"><div class="small-title">どれトレ</div></div>
+            <div class="large"><h1>どれトレ</h1></div>
+          </div>
+          <div class="content" id="home-content"></div>
+        </div>
+
+        <!-- ── ROUTES ── -->
+        <div class="page" id="page-routes">
+          <div class="nav" id="nav-routes">
+            <div class="bar">
+              <div class="leading"><button class="nav-btn" id="editBtn" onclick="toggleEdit()">編集</button></div>
+              <div class="small-title">マイ経路</div>
+              <div class="trailing">
+                <button class="nav-btn" onclick="openSheet()" aria-label="経路を追加">
+                  <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M11 4v14M4 11h14"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="large"><h1>マイ経路</h1></div>
+          </div>
+          <div class="content" id="routes-content"></div>
+        </div>
+
+        <!-- ── SETTINGS ── -->
+        <div class="page" id="page-settings">
+          <div class="nav" id="nav-settings">
+            <div class="bar"><div class="small-title">設定</div></div>
+            <div class="large"><h1>設定</h1></div>
+          </div>
+          <div class="content" id="settings-content">
+            <div class="section-header" style="padding-top:4px;">外観</div>
+            <div class="group">
+              <div class="cell static">
+                <div class="badge" style="background:#5856D6;">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M12.6 8.9A5.8 5.8 0 0 1 5.1 1.4 5.8 5.8 0 1 0 12.6 8.9Z"/></svg>
+                </div>
+                <div class="main"><div class="title">ダークモード</div></div>
+                <label class="sw"><input type="checkbox" id="darkSw" onchange="setDark(this.checked)"><span class="track"></span><span class="knob"></span></label>
+              </div>
+              <div class="cell static">
+                <div class="badge" style="background:var(--orange);">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M7 1a4 4 0 0 0-4 4v3L1.8 10.2c-.3.4 0 .8.4.8h9.6c.4 0 .7-.4.4-.8L11 8V5a4 4 0 0 0-4-4Z"/><path d="M5.5 12a1.5 1.5 0 0 0 3 0Z"/></svg>
+                </div>
+                <div class="main"><div class="title">発車通知</div><div class="sub">乗るべき電車の5分前に通知</div></div>
+                <label class="sw"><input type="checkbox" checked><span class="track"></span><span class="knob"></span></label>
+              </div>
+            </div>
+            <div class="section-header">検索条件</div>
+            <div class="group">
+              <div class="cell" onclick="flashCell(this)">
+                <div class="badge" style="background:var(--green);">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 8l3-5 3 6 2-3 2 2"/></svg>
+                </div>
+                <div class="main"><div class="title">乗り換え時間の余裕</div></div>
+                <div class="footnote">標準</div><div class="chevron">›</div>
+              </div>
+              <div class="cell" onclick="flashCell(this)">
+                <div class="badge" style="background:var(--blue);">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="7" cy="7" r="5.2"/><path d="M7 4v3.2l2 1.4"/></svg>
+                </div>
+                <div class="main"><div class="title">優先する条件</div></div>
+                <div class="footnote">到着の早さ</div><div class="chevron">›</div>
+              </div>
+            </div>
+            <div class="section-header">情報</div>
+            <div class="group">
+              <div class="cell" onclick="flashCell(this)">
+                <div class="main"><div class="title">対応路線</div><div class="sub">東横線・目黒線・新横浜線と直通各線</div></div>
+                <div class="chevron">›</div>
+              </div>
+              <div class="cell" onclick="flashCell(this)">
+                <div class="main"><div class="title">バージョン</div></div>
+                <div class="footnote">1.2.0</div>
+              </div>
+            </div>
+            <p class="caption" style="text-align:center;padding:20px 12px;">時刻データはダミーです。実際の運行情報は各社の案内をご確認ください。</p>
+          </div>
+        </div>
+
+      </div><!-- /tabs-holder -->
+
+      <!-- ── DETAIL (push) ── -->
+      <div class="push-page" id="page-detail">
+        <div class="nav collapsed" id="nav-detail">
+          <div class="bar">
+            <div class="leading">
+              <button class="nav-btn" onclick="closeDetail()"><span class="back-chev">‹</span><span>ホーム</span></button>
+            </div>
+            <div class="small-title" id="detail-title">経路の詳細</div>
+          </div>
+        </div>
+        <div class="content" id="detail-content" style="padding-top:118px;"></div>
+      </div>
+
+      <!-- ── TAB BAR ── -->
+      <div class="tabbar">
+        <button class="tab on" id="tab-home" onclick="switchTab('home')">
+          <svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M4 11.5 13 4l9 7.5V21a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 4 21Z"/><path d="M10 22v-6.5h6V22"/></svg>
+          <span>ホーム</span>
+        </button>
+        <button class="tab" id="tab-routes" onclick="switchTab('routes')">
+          <svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v13a4 4 0 0 0 4 4h11"/><path d="m18.5 17.5 3.5 3.5-3.5 3.5"/><circle cx="7" cy="4" r="2.2" fill="currentColor" stroke="none"/></svg>
+          <span>マイ経路</span>
+        </button>
+        <button class="tab" id="tab-settings" onclick="switchTab('settings')">
+          <svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="13" r="3.4"/><path d="M13 3.5v2.6M13 19.9v2.6M22.5 13h-2.6M6.1 13H3.5M19.7 6.3l-1.8 1.8M8.1 17.9l-1.8 1.8M19.7 19.7l-1.8-1.8M8.1 8.1 6.3 6.3"/></svg>
+          <span>設定</span>
+        </button>
+      </div>
+
+      <!-- ── ADD ROUTE SHEET ── -->
+      <div class="dim" id="dim" onclick="closeSheet()"></div>
+      <div class="sheet" id="sheet">
+        <div class="grabber"></div>
+        <div class="sheet-head">
+          <button class="nav-btn" style="padding-left:0;" onclick="closeSheet()">キャンセル</button>
+          <h2>経路を追加</h2>
+          <span style="width:74px;"></span>
+        </div>
+        <div class="sheet-body">
+          <div class="section-header" style="padding-top:8px;">出発駅</div>
+          <div class="group">
+            <div class="cell" onclick="togglePicker('from')">
+              <div class="main"><div class="title" id="fromLabel" style="color:var(--label2);">選択してください</div></div>
+              <div class="chevron" id="fromChev">›</div>
+            </div>
+            <div class="picker-list" id="picker-from"></div>
+          </div>
+          <div class="section-header">到着駅</div>
+          <div class="group">
+            <div class="cell" onclick="togglePicker('to')">
+              <div class="main"><div class="title" id="toLabel" style="color:var(--label2);">選択してください</div></div>
+              <div class="chevron" id="toChev">›</div>
+            </div>
+            <div class="picker-list" id="picker-to"></div>
+          </div>
+          <p class="footnote" style="padding:14px 4px 18px;">登録した経路は起動時にすぐ表示され、次に乗るべき電車を案内します。</p>
+          <button class="btn-filled" id="saveRouteBtn" disabled onclick="saveRoute()">経路を保存</button>
+        </div>
+      </div>
+
+      <!-- ── ALERT ── -->
+      <div class="alert-wrap" id="alertWrap">
+        <div class="alert">
+          <div class="a-body">
+            <div class="a-title">経路を削除</div>
+            <div class="a-msg" id="alertMsg"></div>
+          </div>
+          <div class="a-btns">
+            <button class="bold" onclick="hideAlert()">キャンセル</button>
+            <button class="destructive" onclick="confirmDelete()">削除</button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /viewport -->
+    <div class="home-indicator"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ───────── data ───────── */
+const LINES = {
+  SH:{c:"var(--sh)",  s:"SH", name:"東急新横浜線"},
+  TY:{c:"var(--ty)",  s:"TY", name:"東急東横線"},
+  MG:{c:"var(--mg)",  s:"MG", name:"東急目黒線"},
+  I: {c:"var(--mita)",s:"I",  name:"都営三田線"},
+  N: {c:"var(--nam)", s:"N",  name:"東京メトロ南北線"},
+  F: {c:"var(--fuku)",s:"F",  name:"東京メトロ副都心線"}
+};
+const STATIONS = ["新横浜","新綱島","日吉","武蔵小杉","田園調布","自由が丘","中目黒","渋谷","目黒","白金高輪","飯田橋","永田町"];
+
+/* ───────── persistence (localStorage) ─────────
+   実際にPWAとして公開した際、経路データは端末のlocalStorageに保存される。
+   ホーム画面に追加したPWAはSafariのITP(7日でデータ消去)の対象外になるため、
+   通常の利用では消えない。 */
+const STORAGE_KEY = "doretore.state.v1";
+function loadPersisted(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return null;
+    const parsed = JSON.parse(raw);
+    if(parsed && Array.isArray(parsed.routes)) return parsed;
+    return null;
+  }catch(e){
+    console.warn("どれトレ: 保存データの読み込みに失敗しました", e);
+    return null;
+  }
+}
+function persist(){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      routes: state.routes,
+      selectedRoute: state.selectedRoute,
+      dark: state.dark
+    }));
+  }catch(e){
+    // プライベートブラウズ等で書き込めない場合もアプリを止めない
+    console.warn("どれトレ: 保存データの書き込みに失敗しました", e);
+  }
+}
+
+let state = {
+  dark:false,
+  editing:false,
+  selectedRoute:0,
+  pendingDelete:null,
+  pickFrom:null, pickTo:null,
+  routes:[
+    {
+      from:"新横浜", to:"飯田橋",
+      cands:[
+        {
+          dep:"9:44", arr:"10:29", dur:45, tr:1, wait:3, fastest:true,
+          line:"SH", type:"急行", dest:"西高島平行（三田線直通）",
+          note:"南北線直通 9:49発 より 7分 早く着きます",
+          legs:[
+            {kind:"ride", line:"SH", type:"急行 西高島平行",
+             desc:"新横浜線→目黒線→三田線 直通", from:"新横浜", dep:"9:44", to:"白金高輪", arr:"10:12", stops:"新綱島・日吉・武蔵小杉・大岡山・目黒 ほか"},
+            {kind:"walk", min:2, note:"同じホームの向かい側に乗り換え（2分）"},
+            {kind:"ride", line:"N", type:"各駅停車 浦和美園行",
+             desc:"白金高輪始発 · 座れる可能性大", from:"白金高輪", dep:"10:14", to:"飯田橋", arr:"10:29", stops:"麻布十番・六本木一丁目・永田町・市ケ谷"}
+          ]
+        },
+        {
+          dep:"9:46", arr:"10:33", dur:47, tr:2, wait:5,
+          line:"TY", type:"各停", dest:"和光市行（東横線直通）",
+          note:"日吉で後続の急行に乗り換えるパターン",
+          legs:[
+            {kind:"ride", line:"TY", type:"各駅停車 和光市行",
+             desc:"新横浜線→東横線 直通", from:"新横浜", dep:"9:46", to:"日吉", arr:"9:52", stops:"新綱島"},
+            {kind:"walk", min:1, note:"同じホームで待つだけ（1分）"},
+            {kind:"ride", line:"I", type:"急行 高島平行",
+             desc:"目黒線→三田線 直通", from:"日吉", dep:"9:54", to:"白金高輪", arr:"10:18", stops:"武蔵小杉・大岡山・目黒"},
+            {kind:"walk", min:2, note:"同じホームの向かい側に乗り換え（2分）"},
+            {kind:"ride", line:"N", type:"各駅停車 赤羽岩淵行",
+             desc:"白金高輪始発", from:"白金高輪", dep:"10:20", to:"飯田橋", arr:"10:33", stops:"麻布十番・永田町・市ケ谷 ほか"}
+          ]
+        },
+        {
+          dep:"9:49", arr:"10:36", dur:47, tr:0, wait:8,
+          line:"MG", type:"急行", dest:"浦和美園行（南北線直通）",
+          note:"乗り換えなし。ただし到着は最速より7分遅い",
+          legs:[
+            {kind:"ride", line:"N", type:"急行 浦和美園行",
+             desc:"新横浜線→目黒線→南北線 直通 · 乗り換えなし", from:"新横浜", dep:"9:49", to:"飯田橋", arr:"10:36", stops:"日吉・武蔵小杉・目黒・白金高輪・永田町 ほか"}
+          ]
+        }
+      ]
+    },
+    {
+      from:"武蔵小杉", to:"渋谷",
+      cands:[
+        {
+          dep:"9:43", arr:"9:56", dur:13, tr:0, wait:2, fastest:true,
+          line:"TY", type:"Fライナー特急", dest:"小手指行",
+          note:"次発の急行より 5分 早く着きます",
+          legs:[
+            {kind:"ride", line:"TY", type:"Fライナー特急 小手指行",
+             desc:"副都心線直通 · 停車駅少なめ", from:"武蔵小杉", dep:"9:43", to:"渋谷", arr:"9:56", stops:"自由が丘・中目黒"}
+          ]
+        },
+        {
+          dep:"9:46", arr:"10:01", dur:15, tr:0, wait:5,
+          line:"TY", type:"急行", dest:"和光市行",
+          note:"特急に間に合わない場合はこちら",
+          legs:[
+            {kind:"ride", line:"TY", type:"急行 和光市行",
+             desc:"副都心線直通", from:"武蔵小杉", dep:"9:46", to:"渋谷", arr:"10:01", stops:"自由が丘・学芸大学・中目黒・代官山"}
+          ]
+        },
+        {
+          dep:"9:48", arr:"10:07", dur:19, tr:0, wait:7,
+          line:"TY", type:"各停", dest:"渋谷行",
+          note:"各駅停車。座りたいときに",
+          legs:[
+            {kind:"ride", line:"TY", type:"各駅停車 渋谷行",
+             desc:"全駅に停車", from:"武蔵小杉", dep:"9:48", to:"渋谷", arr:"10:07", stops:"元住吉〜代官山 の各駅"}
+          ]
+        }
+      ]
+    }
+  ]
+};
+
+/* ───────── helpers ───────── */
+const $ = id => document.getElementById(id);
+function badge(line, size){
+  const l = LINES[line];
+  return '<div class="badge" style="background:'+l.c+';'+(size?'width:'+size+'px;height:'+size+'px;':'')+'">'+l.s+'</div>';
+}
+function flashCell(el){ /* visual feedback only for stub cells */ }
+
+/* generate plausible candidates for user-created routes */
+function makeCands(from, to){
+  const base = [[44,1,"急行"],[47,2,"各停"],[51,0,"急行"]];
+  const durBase = 18 + Math.abs(STATIONS.indexOf(from) - STATIONS.indexOf(to)) * 4;
+  return base.map((b,i)=>{
+    const dep = "9:" + b[0];
+    const dur = durBase + i*3 + (b[1]===0 ? 4 : 0);
+    const arrMin = b[0] + dur;
+    const arr = (9 + Math.floor(arrMin/60)) + ":" + String(arrMin%60).padStart(2,"0");
+    const legs = b[1] === 0
+      ? [{kind:"ride", line:"MG", type:b[2]+" 直通", desc:"乗り換えなし", from, dep, to, arr, stops:"途中主要駅に停車"}]
+      : [
+          {kind:"ride", line:"TY", type:b[2]+" 直通", desc:"まずはこの電車で先行", from, dep, to:"日吉", arr:"9:"+(b[0]+6), stops:"途中各駅"},
+          {kind:"walk", min:2, note:"同じホームで乗り換え（2分）"},
+          {kind:"ride", line:"MG", type:"急行", desc:"後続の速達に乗り換え", from:"日吉", dep:"9:"+(b[0]+8), to, arr, stops:"主要駅のみ停車"}
+        ];
+    return {dep, arr, dur, tr:b[1], wait:i*3+3, fastest:i===0,
+            line:legs[0].line, type:b[2], dest: legs[0].type,
+            note: i===0 ? "この時間帯の最速パターンです" : "最速より "+(i*3+(b[1]===0?4:0))+"分 遅く到着",
+            legs};
+  });
+}
+
+/* ───────── render: home ───────── */
+function renderHome(){
+  const c = $("home-content");
+  if(state.routes.length === 0){
+    c.innerHTML =
+      '<div class="empty">'+
+        '<div class="icon"><svg width="56" height="56" viewBox="0 0 56 56" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="12" y="8" width="32" height="36" rx="6"/><path d="M12 32h32M20 44l-4 6M36 44l4 6"/><circle cx="21" cy="38" r="1.8" fill="currentColor"/><circle cx="35" cy="38" r="1.8" fill="currentColor"/></svg></div>'+
+        '<h3>経路が未登録です</h3>'+
+        '<p>よく使う出発駅と到着駅を登録すると、<br>起動した瞬間に「どの電車に乗るべきか」を表示します。</p>'+
+        '<button class="btn-tinted" onclick="switchTab(\'routes\');openSheet()">最初の経路を登録</button>'+
+      '</div>';
+    return;
+  }
+  if(state.selectedRoute >= state.routes.length) state.selectedRoute = 0;
+  const r = state.routes[state.selectedRoute];
+  const best = r.cands.find(x=>x.fastest) || r.cands[0];
+
+  let html = '<div class="chips">';
+  state.routes.forEach((rt,i)=>{
+    html += '<button class="chip'+(i===state.selectedRoute?' on':'')+'" onclick="selectRoute('+i+')">'+rt.from+' → '+rt.to+'</button>';
+  });
+  html += '</div>';
+
+  html +=
+    '<div class="hero" onclick="openDetail('+state.selectedRoute+','+r.cands.indexOf(best)+')">'+
+      '<div class="pill">最速</div>'+
+      '<div class="eyebrow">'+r.from+' → '+r.to+'　次に乗るべき電車</div>'+
+      '<div class="dep">'+best.dep+'<small> 発（あと'+best.wait+'分）</small></div>'+
+      '<div class="train">'+badge(best.line,22)+best.type+' '+best.dest+'</div>'+
+      '<div class="meta"><span>到着 '+best.arr+'</span><span>所要 '+best.dur+'分</span><span>乗り換え '+best.tr+'回</span></div>'+
+      '<div class="save">'+best.note+'</div>'+
+    '</div>';
+
+  html += '<div class="section-header">発車順にくらべる</div><div class="group">';
+  r.cands.forEach((cd,i)=>{
+    const diff = cd.fastest ? '<span class="fast">最速</span>'
+      : '<span class="late">+'+(toMin(cd.arr)-toMin(best.arr))+'分</span>';
+    html +=
+      '<div class="cell" onclick="openDetail('+state.selectedRoute+','+i+')">'+
+        '<div class="cand-time">'+cd.dep+'</div>'+
+        badge(cd.line)+
+        '<div class="main"><div class="title" style="font-size:15px;font-weight:600;">'+cd.type+' '+cd.dest+'</div>'+
+        '<div class="sub">乗り換え'+cd.tr+'回 · 所要'+cd.dur+'分</div></div>'+
+        '<div class="arr-tag"><div class="big">'+cd.arr+'着</div>'+diff+'</div>'+
+        '<div class="chevron">›</div>'+
+      '</div>';
+  });
+  html += '</div>';
+  html += '<p class="caption" style="padding:14px 4px;">9:41 現在の時刻表に基づく案内（デモデータ）。遅延は反映されません。</p>';
+  c.innerHTML = html;
+}
+function toMin(t){ const p=t.split(":"); return (+p[0])*60 + (+p[1]); }
+function selectRoute(i){ state.selectedRoute = i; persist(); renderHome(); }
+
+/* ───────── render: routes ───────── */
+function renderRoutes(){
+  const c = $("routes-content");
+  if(state.routes.length === 0){
+    state.editing = false; $("editBtn").textContent = "編集";
+    c.innerHTML =
+      '<div class="empty">'+
+        '<div class="icon"><svg width="56" height="56" viewBox="0 0 56 56" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M14 8v30a8 8 0 0 0 8 8h22"/><path d="m38 40 6 6-6 6"/><circle cx="14" cy="8" r="4" fill="currentColor" stroke="none"/></svg></div>'+
+        '<h3>マイ経路はまだありません</h3>'+
+        '<p>右上の「＋」から、よく使う経路を<br>登録しておきましょう。</p>'+
+        '<button class="btn-tinted" onclick="openSheet()">経路を追加</button>'+
+      '</div>';
+    return;
+  }
+  let html = '<div class="group'+(state.editing?' editing':'')+'">';
+  state.routes.forEach((r,i)=>{
+    const best = r.cands.find(x=>x.fastest) || r.cands[0];
+    html +=
+      '<div class="cell" onclick="goHomeWith('+i+')">'+
+        '<button class="minus-btn" onclick="event.stopPropagation();askDelete('+i+')" aria-label="削除">−</button>'+
+        badge(best.line)+
+        '<div class="main"><div class="title">'+r.from+' → '+r.to+'</div>'+
+        '<div class="sub">最速 '+best.dep+'発 · '+best.arr+'着（'+best.dur+'分）</div></div>'+
+        '<div class="chevron">›</div>'+
+      '</div>';
+  });
+  html += '</div>';
+  html += '<p class="footnote" style="padding:12px 4px;">タップするとホームでその経路の案内を表示します。</p>';
+  c.innerHTML = html;
+}
+function goHomeWith(i){
+  if(state.editing) return;
+  state.selectedRoute = i;
+  renderHome();
+  switchTab("home");
+}
+function toggleEdit(){
+  if(state.routes.length===0) return;
+  state.editing = !state.editing;
+  $("editBtn").textContent = state.editing ? "完了" : "編集";
+  renderRoutes();
+}
+function askDelete(i){
+  state.pendingDelete = i;
+  const r = state.routes[i];
+  $("alertMsg").textContent = "「"+r.from+" → "+r.to+"」を削除します。この操作は取り消せません。";
+  $("alertWrap").classList.add("show");
+}
+function hideAlert(){ $("alertWrap").classList.remove("show"); state.pendingDelete = null; }
+function confirmDelete(){
+  if(state.pendingDelete !== null){
+    state.routes.splice(state.pendingDelete, 1);
+    if(state.selectedRoute >= state.routes.length) state.selectedRoute = 0;
+    persist();
+  }
+  $("alertWrap").classList.remove("show");
+  state.pendingDelete = null;
+  renderRoutes(); renderHome();
+}
+
+/* ───────── detail (push) ───────── */
+function openDetail(ri, ci){
+  const r = state.routes[ri], cd = r.cands[ci];
+  $("detail-title").textContent = cd.dep + "発 · " + r.from + " → " + r.to;
+  let html =
+    '<div class="summary-grid">'+
+      '<div class="sum-card"><div class="v">'+cd.arr+'</div><div class="k">到着時刻</div></div>'+
+      '<div class="sum-card"><div class="v">'+cd.dur+'分</div><div class="k">所要時間</div></div>'+
+      '<div class="sum-card"><div class="v">'+cd.tr+'回</div><div class="k">乗り換え</div></div>'+
+    '</div>';
+  if(cd.fastest){
+    html += '<div class="cell static" style="background:rgba(52,199,89,0.14);border-radius:10px;margin-bottom:16px;">'+
+      '<div class="badge" style="background:var(--green);">✓</div>'+
+      '<div class="main"><div class="title" style="font-size:15px;font-weight:600;">この時間帯の最速ルートです</div>'+
+      '<div class="sub">'+cd.note+'</div></div></div>';
+  }
+  html += '<div class="section-header" style="padding-left:4px;">乗り換え案内</div><div class="timeline">';
+  cd.legs.forEach((leg)=>{
+    if(leg.kind === "ride"){
+      const l = LINES[leg.line];
+      html +=
+        '<div class="tl-row"><div class="tl-line"><div class="tl-dot" style="border-color:'+l.c+';"></div></div>'+
+        '<div style="flex:1;"><span class="tl-station">'+leg.from+'</span> <span class="tl-time">'+leg.dep+'発</span></div></div>'+
+        '<div class="tl-row"><div class="tl-line"><div class="tl-bar" style="background:'+l.c+';"></div></div>'+
+        '<div class="tl-train" style="flex:1;">'+
+          '<div class="name">'+badge(leg.line,20)+l.name+' '+leg.type+'</div>'+
+          '<div class="note">'+leg.desc+'</div>'+
+          '<div class="note">停車駅: '+leg.stops+'</div>'+
+        '</div></div>'+
+        '<div class="tl-row"><div class="tl-line"><div class="tl-dot" style="border-color:'+l.c+';"></div></div>'+
+        '<div style="flex:1;"><span class="tl-station">'+leg.to+'</span> <span class="tl-time">'+leg.arr+'着</span></div></div>';
+    }else{
+      html +=
+        '<div class="tl-row"><div class="tl-line"><div class="tl-bar walk"></div></div>'+
+        '<div class="tl-train" style="flex:1;"><div class="note" style="font-size:13px;">'+
+        '<svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" style="vertical-align:-1px;margin-right:4px;"><circle cx="7" cy="1.8" r="1.5"/><path d="M5.2 4.2 3 6l1.2 1L6 5.6l.6 2L4.4 11h1.5l1.7-2.6L9 10.6l1-.8-1.8-2.4.4-2.2 1.6 1 .8-1-2.6-1.8Z"/></svg>'+
+        leg.note+'</div></div></div>';
+    }
+  });
+  html += '</div>';
+  html += '<p class="caption" style="padding:14px 4px 8px;">白金高輪始発の南北線は同一ホーム乗り換え。階段の移動はありません。</p>';
+  $("detail-content").innerHTML = html;
+  $("detail-content").scrollTop = 0;
+  $("page-detail").classList.add("open");
+  $("tabsHolder").classList.add("pushed");
+}
+function closeDetail(){
+  $("page-detail").classList.remove("open");
+  $("tabsHolder").classList.remove("pushed");
+}
+
+/* ───────── tabs ───────── */
+function switchTab(name){
+  closeDetail();
+  ["home","routes","settings"].forEach(t=>{
+    $("page-"+t).classList.toggle("active", t===name);
+    $("tab-"+t).classList.toggle("on", t===name);
+  });
+}
+
+/* ───────── sheet ───────── */
+function buildPickers(){
+  ["from","to"].forEach(which=>{
+    const el = $("picker-"+which);
+    el.innerHTML = STATIONS.map(s=>
+      '<div class="cell" data-st="'+s+'" onclick="pickStation(\''+which+'\',\''+s+'\')">'+
+      '<div class="main"><div class="title">'+s+'</div></div><div class="check">✓</div></div>'
+    ).join("");
+  });
+}
+function togglePicker(which){
+  const el = $("picker-"+which);
+  const other = $("picker-"+(which==="from"?"to":"from"));
+  other.classList.remove("open");
+  el.classList.toggle("open");
+}
+function pickStation(which, s){
+  if(which==="from") state.pickFrom = s; else state.pickTo = s;
+  const lab = $(which+"Label");
+  lab.textContent = s; lab.style.color = "var(--label)";
+  const el = $("picker-"+which);
+  el.querySelectorAll(".cell").forEach(c=>c.classList.toggle("selected", c.dataset.st===s));
+  el.classList.remove("open");
+  const ok = state.pickFrom && state.pickTo && state.pickFrom !== state.pickTo;
+  $("saveRouteBtn").disabled = !ok;
+}
+function openSheet(){
+  state.pickFrom = null; state.pickTo = null;
+  $("fromLabel").textContent = "選択してください"; $("fromLabel").style.color = "var(--label2)";
+  $("toLabel").textContent = "選択してください"; $("toLabel").style.color = "var(--label2)";
+  $("saveRouteBtn").disabled = true;
+  document.querySelectorAll(".picker-list .cell").forEach(c=>c.classList.remove("selected"));
+  document.querySelectorAll(".picker-list").forEach(p=>p.classList.remove("open"));
+  $("dim").classList.add("show");
+  $("sheet").classList.add("show");
+}
+function closeSheet(){
+  $("dim").classList.remove("show");
+  $("sheet").classList.remove("show");
+}
+function saveRoute(){
+  const exists = state.routes.some(r=>r.from===state.pickFrom && r.to===state.pickTo);
+  if(!exists){
+    state.routes.push({from:state.pickFrom, to:state.pickTo, cands:makeCands(state.pickFrom, state.pickTo)});
+    state.selectedRoute = state.routes.length - 1;
+    persist();
+  }
+  closeSheet();
+  renderRoutes(); renderHome();
+}
+
+/* ───────── dark mode ───────── */
+function setDark(on){
+  state.dark = on;
+  $("screen").classList.toggle("dark", on);
+  persist();
+}
+
+/* ───────── large-title collapse ───────── */
+[["home-content","nav-home"],["routes-content","nav-routes"],["settings-content","nav-settings"]].forEach(([cid,nid])=>{
+  $(cid).addEventListener("scroll", e=>{
+    $(nid).classList.toggle("collapsed", e.target.scrollTop > 26);
+  });
+});
+
+/* ───────── init ───────── */
+(function initFromStorage(){
+  const saved = loadPersisted();
+  if(saved){
+    state.routes = saved.routes;
+    state.selectedRoute = saved.selectedRoute || 0;
+    state.dark = !!saved.dark;
+  }else{
+    // 初回起動: 同梱のサンプル経路をそのまま保存し、次回以降はそれを読み込む
+    persist();
+  }
+  $("screen").classList.toggle("dark", state.dark);
+  $("darkSw").checked = state.dark;
+})();
+buildPickers();
+renderHome();
+renderRoutes();
+</script>
+</body>
+</html>
