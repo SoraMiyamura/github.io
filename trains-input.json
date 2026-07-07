@@ -303,6 +303,194 @@
           "dep": "11:54"
         }
       ]
+    },
+    {
+      "branch": "N",
+      "calendar": "weekday",
+      "type": "loc",
+      "origin": "日吉",
+      "dest": "浦和美園",
+      "stops": [
+        {
+          "station": "武蔵小山",
+          "arr": "11:40",
+          "dep": "11:41"
+        },
+        {
+          "station": "目黒",
+          "arr": "11:44",
+          "dep": "11:46"
+        },
+        {
+          "station": "白金高輪",
+          "arr": "11:50",
+          "dep": "11:51"
+        },
+        {
+          "station": "飯田橋",
+          "arr": "12:05",
+          "dep": "12:06"
+        }
+      ]
+    },
+    {
+      "branch": "N",
+      "calendar": "weekday",
+      "type": "exp",
+      "origin": "新横浜",
+      "dest": "赤羽岩淵",
+      "stops": [
+        {
+          "station": "武蔵小山",
+          "arr": "11:48",
+          "dep": "11:48"
+        },
+        {
+          "station": "目黒",
+          "arr": "11:51",
+          "dep": "11:51"
+        },
+        {
+          "station": "白金高輪",
+          "arr": "11:56",
+          "dep": "11:57"
+        },
+        {
+          "station": "飯田橋",
+          "arr": "12:11",
+          "dep": "12:12"
+        }
+      ]
+    },
+    {
+      "branch": "I",
+      "calendar": "weekday",
+      "type": "loc",
+      "origin": "日吉",
+      "dest": "西高島平",
+      "stops": [
+        {
+          "station": "武蔵小山",
+          "arr": "11:47",
+          "dep": "11:50"
+        },
+        {
+          "station": "目黒",
+          "arr": "11:53",
+          "dep": "11:55"
+        },
+        {
+          "station": "白金高輪",
+          "arr": "11:59",
+          "dep": "11:59"
+        },
+        {
+          "station": "日比谷",
+          "arr": "12:09",
+          "dep": "12:10"
+        }
+      ]
+    },
+    {
+      "branch": "I",
+      "calendar": "weekday",
+      "type": "loc",
+      "origin": "日吉",
+      "dest": "西高島平",
+      "stops": [
+        {
+          "station": "武蔵小山",
+          "arr": "11:55",
+          "dep": "11:56"
+        },
+        {
+          "station": "目黒",
+          "arr": "11:59",
+          "dep": "12:01"
+        },
+        {
+          "station": "白金高輪",
+          "arr": "12:05",
+          "dep": "12:05"
+        },
+        {
+          "station": "日比谷",
+          "arr": "12:15",
+          "dep": "12:16"
+        }
+      ]
+    },
+    {
+      "branch": "I",
+      "calendar": "weekday",
+      "type": "loc",
+      "origin": "白金高輪",
+      "dest": "西高島平",
+      "stops": [
+        {
+          "station": "白金高輪",
+          "dep": "11:17"
+        },
+        {
+          "station": "日比谷",
+          "arr": "11:27",
+          "dep": "11:28"
+        }
+      ]
+    },
+    {
+      "branch": "I",
+      "calendar": "weekday",
+      "type": "loc",
+      "origin": "白金高輪",
+      "dest": "西高島平",
+      "stops": [
+        {
+          "station": "白金高輪",
+          "dep": "11:23"
+        },
+        {
+          "station": "日比谷",
+          "arr": "11:33",
+          "dep": "11:34"
+        }
+      ]
+    },
+    {
+      "branch": "I",
+      "calendar": "weekday",
+      "type": "loc",
+      "origin": "白金高輪",
+      "dest": "西高島平",
+      "stops": [
+        {
+          "station": "白金高輪",
+          "dep": "11:47"
+        },
+        {
+          "station": "日比谷",
+          "arr": "11:57",
+          "dep": "11:58"
+        }
+      ]
+    },
+    {
+      "branch": "I",
+      "calendar": "weekday",
+      "type": "loc",
+      "origin": "白金高輪",
+      "dest": "西高島平",
+      "stops": [
+        {
+          "station": "白金高輪",
+          "dep": "11:53"
+        },
+        {
+          "station": "日比谷",
+          "arr": "12:03",
+          "dep": "12:04"
+        }
+      ]
     }
   ]
 }
