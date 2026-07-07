@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "meta": {
+    "note": "このファイルだけがダイヤ改正のたびに更新対象。ロジック(index.html側)は触らない想定。",
+    "lastUpdated": "2026-07-07"
+  },
+  "stationSets": {
+    "meguro_down": {
+      "displayName": "目黒駅 (南北線・三田線方面)",
+      "anchorStation": "目黒",
+      "source": "https://www.kotsu.metro.tokyo.jp/subway/timetable/mita/I01ND.html",
+      "revision": "令和8年3月16日改正",
+      "calendar": "weekday",
+      "destLabel": {
+        "": "西高島平",
+        "高": "高島平",
+        "赤": "赤羽岩淵",
+        "浦": "浦和美園",
+        "鳩": "鳩ヶ谷",
+        "神": "王子神谷"
+      },
+      "destNote": "\"\"=西高島平(三田線) 高=高島平(三田線) 赤=赤羽岩淵(南北線) 浦=浦和美園(南北線、赤羽岩淵より先) 鳩=鳩ヶ谷(同) 神=王子神谷(南北線、赤羽岩淵より手前)",
+      "entries": [
+        [5,12,"",false],[5,16,"浦",false],[5,25,"",false],[5,38,"浦",false],[5,47,"浦",false],[5,52,"",false],
+        [6,0,"浦",false],[6,3,"",false],[6,9,"浦",false],[6,19,"",false],[6,21,"浦",false],[6,29,"浦",false],[6,32,"",false],[6,39,"浦",false],[6,47,"",false],[6,50,"浦",false],[6,55,"",false],[6,59,"浦",false],
+        [7,2,"",false],[7,5,"",false],[7,7,"浦",false],[7,11,"浦",false],[7,13,"",false],[7,16,"鳩",false],[7,20,"",false],[7,22,"浦",false],[7,25,"",false],[7,29,"浦",false],[7,32,"",false],[7,35,"鳩",false],[7,39,"",false],[7,42,"浦",false],[7,45,"",false],[7,47,"鳩",false],[7,50,"",false],[7,52,"浦",false],[7,55,"鳩",false],[7,57,"",false],
+        [8,0,"浦",false],[8,3,"鳩",false],[8,6,"",false],[8,8,"浦",false],[8,11,"",false],[8,13,"高",false],[8,16,"鳩",false],[8,18,"",false],[8,21,"神",false],[8,23,"浦",false],[8,26,"高",false],[8,28,"鳩",false],[8,31,"高",false],[8,33,"",false],[8,36,"浦",false],[8,38,"高",false],[8,41,"浦",false],[8,43,"鳩",false],[8,45,"高",false],[8,48,"",false],[8,50,"浦",false],[8,55,"",false],[8,58,"鳩",false],
+        [9,1,"",false],[9,4,"浦",false],[9,8,"",false],[9,11,"高",false],[9,13,"鳩",false],[9,18,"高",false],[9,20,"鳩",false],[9,23,"",false],[9,28,"浦",false],[9,31,"",false],[9,34,"高",false],[9,38,"",false],[9,41,"浦",false],[9,45,"高",false],[9,49,"",false],[9,53,"浦",false],[9,57,"",false],
+        [10,4,"",false],[10,8,"",false],[10,11,"浦",false],[10,18,"",false],[10,22,"浦",false],[10,27,"",false],[10,32,"",false],[10,37,"",false],[10,40,"赤",false],[10,47,"",false],[10,51,"赤",false],[10,55,"",false]
+      ]
+    },
+    "shirokane_up": {
+      "displayName": "白金高輪駅 (目黒方面・目黒線→新横浜線)",
+      "anchorStation": "白金高輪",
+      "source": "ユーザー提供PDF「白金高輪駅(N03)時刻表」",
+      "revision": "2026年3月改正",
+      "calendar": "weekday",
+      "destLabel": {
+        "": "日吉",
+        "武": "武蔵小杉",
+        "奥": "奥沢",
+        "浜": "新横浜",
+        "海": "海老名",
+        "湘": "湘南台",
+        "大": "大和",
+        "谷": "西谷"
+      },
+      "destNote": "\"\"=日吉(新横浜線区間まで届かない) 武=武蔵小杉 奥=奥沢 浜=新横浜 海/湘/大/谷=新横浜より先(相鉄線内)。express(true)は表内の赤字=急行。",
+      "entries": [
+        [5,10,"浜",false],[5,21,"",false],[5,36,"浜",true],[5,44,"",false],[5,51,"",false],
+        [6,0,"浜",false],[6,9,"",false],[6,19,"湘",true],[6,22,"",false],[6,28,"浜",false],[6,32,"",false],[6,35,"",false],[6,43,"",false],[6,47,"",false],[6,50,"海",true],[6,53,"浜",false],[6,57,"",false],
+        [7,0,"",false],[7,2,"浜",false],[7,5,"",false],[7,8,"海",true],[7,11,"",false],[7,13,"湘",false],[7,16,"浜",false],[7,19,"武",false],[7,22,"",false],[7,25,"浜",false],[7,28,"",false],[7,31,"",false],[7,34,"大",true],[7,37,"浜",false],[7,40,"武",true],[7,43,"",false],[7,46,"海",false],[7,49,"",false],[7,52,"湘",false],[7,56,"",true],[7,59,"",false],
+        [8,1,"武",true],[8,4,"",false],[8,6,"浜",true],[8,9,"",false],[8,12,"",true],[8,15,"武",false],[8,18,"武",false],[8,20,"浜",true],[8,23,"",false],[8,25,"",false],[8,28,"武",false],[8,30,"浜",false],[8,33,"武",false],[8,35,"",false],[8,38,"海",true],[8,41,"浜",false],[8,43,"武",false],[8,45,"谷",true],[8,48,"",false],[8,51,"浜",false],[8,53,"",false],[8,56,"海",true],[8,59,"武",false],
+        [9,1,"",false],[9,5,"",true],[9,8,"武",false],[9,11,"武",false],[9,14,"",false],[9,17,"武",false],[9,19,"",false],[9,23,"海",true],[9,27,"武",false],[9,30,"浜",false],[9,33,"武",false],[9,36,"",false],[9,40,"浜",false],[9,45,"大",false],[9,49,"",false],[9,55,"海",true],
+        [10,1,"武",false],[10,6,"武",false],[10,11,"谷",true],[10,16,"",false],[10,21,"武",false],[10,24,"海",true],[10,29,"",false],[10,34,"",false],[10,39,"浜",true],[10,46,"武",false],[10,51,"浜",false],[10,54,"海",true],[10,59,"",false]
+      ]
+    }
+  }
+}

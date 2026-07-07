@@ -2,11 +2,12 @@
 // 目的: index.html・manifest・アイコンをキャッシュし、電波が悪い/圏外でも
 // 「起動して保存済み経路の最速電車をすぐ見る」というコア体験を止めない。
 
-const CACHE_NAME = "doretore-cache-v2"; // 中身を更新したらこの番号を上げる
+const CACHE_NAME = "doretore-cache-v5"; // 中身を更新したらこの番号を上げる
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.json",
+  "./timetable-data.json",
   "./icon-192.png",
   "./icon-512.png",
   "./icon-maskable-192.png",
