@@ -2,12 +2,12 @@
 // 目的: index.html・manifest・アイコンをキャッシュし、電波が悪い/圏外でも
 // 「起動して保存済み経路の最速電車をすぐ見る」というコア体験を止めない。
 
-const CACHE_NAME = "doretore-cache-v9"; // 中身を更新したらこの番号を上げる
+const CACHE_NAME = "doretore-cache-v12"; // 中身を更新したらこの番号を上げる
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.json",
-  "./timetable-data.json",
+  "./network.js",
   "./icon-192.png",
   "./icon-512.png",
   "./icon-maskable-192.png",
@@ -15,7 +15,7 @@ const APP_SHELL = [
   "./icon-180.png"
 ];
 const OPTIONAL_SHELL = [
-  "./trains-input.json" // 無くても致命的ではないので個別にキャッシュを試みる
+  "./trains-input.json" // データ本体。初回設置前でもインストール自体は失敗させない
 ];
 
 // インストール時: アプリの表示に必要な最小限のファイルを一括キャッシュ

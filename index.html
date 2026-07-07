@@ -459,6 +459,7 @@
     </div><!-- /viewport -->
   </div><!-- /screen -->
 
+<script src="network.js"></script>
 <script>
 "use strict";
 /* ═════════ 路線メタ ═════════ */
@@ -467,153 +468,46 @@ const LINES = {
   TY:{c:"var(--ty)",  s:"TY", name:"東急東横線"},
   MG:{c:"var(--mg)",  s:"MG", name:"東急目黒線"},
   I: {c:"var(--mita)",s:"I",  name:"都営三田線"},
-  N: {c:"var(--nam)", s:"N",  name:"東京メトロ南北線"}
+  N: {c:"var(--nam)", s:"N",  name:"東京メトロ南北線"},
+  SO:{c:"#0B2A6B",    s:"SO", name:"相鉄線"},
+  SR:{c:"#1CADCA",    s:"SR", name:"埼玉高速鉄道"}
 };
 
-/* ═════════ ネットワーク定義 ═════════
-   [駅名, 起点からの累積所要分(各停)] で経路を表す。
-   将来ODPT等の実データに差し替える場合はこのブロックと
-   generateTimetable() を実データ由来のJSONに置き換える。 */
-const P_SH  = [["新横浜",0],["新綱島",3],["日吉",6]];
-const P_COR = [["日吉",0],["元住吉",2],["武蔵小杉",4],["新丸子",5],["多摩川",7],["田園調布",9]]; // 東横線・目黒線 並走区間(全駅対面乗換)
-const P_MG  = [["田園調布",0],["奥沢",2],["大岡山",4],["洗足",6],["西小山",7],["武蔵小山",9],["不動前",11],["目黒",13]];
-const P_SHD = [["目黒",0],["白金台",2],["白金高輪",4]];
-const P_N   = [["白金高輪",0],["麻布十番",2],["六本木一丁目",4],["溜池山王",6],["永田町",8],["四ツ谷",10],["市ケ谷",12],["飯田橋",14],["後楽園",16],["東大前",18],["本駒込",19],["駒込",21],["西ケ原",23],["王子",25],["王子神谷",27],["志茂",29],["赤羽岩淵",31]];
-const P_I   = [["白金高輪",0],["三田",2],["芝公園",4],["御成門",5],["内幸町",7],["日比谷",9],["大手町",11],["神保町",13],["水道橋",15],["春日",16],["白山",18],["千石",20],["巣鴨",22],["西巣鴨",24],["新板橋",25],["板橋区役所前",27],["板橋本町",29],["本蓮沼",31],["志村坂上",33],["志村三丁目",34],["蓮根",36],["西台",38],["高島平",39],["新高島平",41],["西高島平",43]];
+/* ═════════ ネットワーク定義: network.js(共有ファイル)から取得 ═════════
+   路線・駅の追加・変更は network.js だけを編集する。
+   このファイル側は network.js が公開する NETWORK / netBfsDist /
+   netStationsOfGroups などを使う。 */
 
-function joinPaths(...ps){
-  const out = ps[0].map(x=>[x[0],x[1]]);
-  for(let k=1;k<ps.length;k++){
-    const base = out[out.length-1][1];
-    ps[k].forEach(([n,c],i)=>{ if(i===0) return; out.push([n, base+c]); });
+/* 路線バッジ判定(共用区間は列車の系統で解決) */
+function stationLine(st, train){
+  for(const segKey of NETWORK.segmentPrecedence){
+    const seg = NETWORK.segments[segKey];
+    if(!seg.some(x=>x[0]===st)) continue;
+    const rule = NETWORK.segmentLine[segKey];
+    if(typeof rule === "string") return rule;
+    return (rule.shared && rule.shared[train.branch]) || rule.default;
   }
-  return out;
-}
-function reversePath(p){
-  const end = p[p.length-1][1];
-  return [...p].reverse().map(([n,c])=>[n, end-c]);
-}
-function sliceFrom(p, st){
-  const i = p.findIndex(x=>x[0]===st);
-  const o = p[i][1];
-  return p.slice(i).map(([n,c])=>[n, c-o]);
-}
-function truncTo(p, st){
-  const i = p.findIndex(x=>x[0]===st);
-  return p.slice(0, i+1);
+  return "MG";
 }
 
-const FULL = {
-  I:  joinPaths(P_SH, P_COR, P_MG, P_SHD, P_I),   // 新横浜→西高島平
-  N:  joinPaths(P_SH, P_COR, P_MG, P_SHD, P_N),   // 新横浜→赤羽岩淵
-  TY: joinPaths(P_SH, P_COR)                       // 新横浜→(田園調布から東横線渋谷方面へ抜ける)
-};
+/* 対面乗り換え可能駅(乗換0分)・急行通過駅・経路登録の駅リスト */
+const TRANSFER = new Set(NETWORK.transferStations);
+const EXP_SKIP = new Set(NETWORK.expressSkip);
+const STATIONS = netStationsOfGroups(false); // 準備中(prep)の駅は経路登録の選択肢から除外
 
 /* ═════════ 逆方向乗車の除外 ═════════
-   目黒・田園調布などは順方向/逆方向の両方の列車が停まる共用区間のため、
-   「乗車駅から見て目的駅と逆に進む列車」を初期候補から除外する。 */
-const FULL_I_NAMES = FULL.I.map(x=>x[0]);
-const FULL_N_NAMES = FULL.N.map(x=>x[0]);
-const MITA_ONLY_SET = new Set(P_I.slice(1).map(x=>x[0]));
-const NAMBOKU_ONLY_SET = new Set(P_N.slice(1).map(x=>x[0]));
-function branchOf(station){
-  if(MITA_ONLY_SET.has(station)) return "I";
-  if(NAMBOKU_ONLY_SET.has(station)) return "N";
-  return "SHARED"; // 新横浜〜白金高輪の共用区間
-}
-function directionOK(train, idx, from, to){
-  const bFrom = branchOf(from), bTo = branchOf(to);
-  // 出発駅・目的駅が別系統(三田線⇔南北線)にまたがる場合は、まず白金高輪を経由点とみなす
-  const waypoint = (bFrom !== "SHARED" && bTo !== "SHARED" && bFrom !== bTo) ? "白金高輪" : to;
-  const branch = bFrom !== "SHARED" ? bFrom : (bTo !== "SHARED" ? bTo : "N");
-  const refList = branch === "I" ? FULL_I_NAMES : FULL_N_NAMES;
-  const idxFrom = refList.indexOf(from), idxWp = refList.indexOf(waypoint);
-  if(idxFrom === -1 || idxWp === -1) return true; // 判定できない場合は許可(安全側)
-  const neededSign = Math.sign(idxWp - idxFrom);
-  if(neededSign === 0) return true;
+   目黒・田園調布などは両方向の列車が停まる共用区間のため、
+   「目的駅への駅数(BFS)が減る方向に進む列車」だけを初期候補にする。
+   分岐を含む路線図でもそのまま機能する汎用ロジック。 */
+function dirTowards(train, idx, distMap){
   const st = train.stops;
-  if(idx+1 >= st.length) return true;
-  const idxNext = refList.indexOf(st[idx+1][0]);
-  if(idxNext === -1) return true; // 次の駅がこの系統に無い(分岐後など) → 許可
-  return Math.sign(idxNext - idxFrom) === neededSign;
+  if(idx+1 >= st.length) return false;
+  const dHere = distMap.get(st[idx][0]);
+  const dNext = distMap.get(st[idx+1][0]);
+  if(dHere == null || dNext == null) return false;
+  return dNext < dHere;
 }
 
-/* 駅集合(路線バッジ判定用) */
-const SET_SH  = new Set(["新横浜","新綱島"]);
-const SET_COR = new Set(P_COR.map(x=>x[0]));
-const SET_MGE = new Set(["奥沢","大岡山","洗足","西小山","武蔵小山","不動前"]);
-const SET_SHD = new Set(["目黒","白金台","白金高輪"]);
-const SET_N   = new Set(P_N.map(x=>x[0]));
-function stationLine(st, train){
-  if(SET_SH.has(st)) return "SH";
-  if(SET_COR.has(st)) return train.branch==="TY" ? "TY" : "MG";
-  if(SET_MGE.has(st)) return "MG";
-  if(SET_SHD.has(st)) return train.branch==="N" ? "N" : (train.branch==="I" ? "I" : "MG");
-  if(SET_N.has(st)) return "N";
-  return "I";
-}
-
-/* 対面乗り換え可能駅(乗換0分): 日吉〜田園調布の全駅 + 白金高輪 */
-const TRANSFER = new Set([...P_COR.map(x=>x[0]), "白金高輪"]);
-
-/* 急行通過駅(地下鉄区間は全列車各駅停車) */
-const EXP_SKIP = new Set(["元住吉","新丸子","多摩川","奥沢","洗足","西小山","不動前"]);
-
-/* 駅選択リスト(順序: 三田線系統 → 南北線) */
-const STATIONS = [...FULL.I.map(x=>x[0]), ...P_N.slice(1).map(x=>x[0])];
-
-/* ═════════ 実データ: 目黒駅(I01) 平日 西高島平・赤羽岩淵方面 ═════════
-   出典: 東京都交通局 目黒駅 時刻表(令和8年3月16日改正)
-/* ═════════ 実データ駅セットのアダプタ ═════════
-   timetable-data.json の stationSets キーごとに「コード→経路」変換ルールを定義する。
-   データ(JSON)は毎年のダイヤ改正で差し替える対象、ここのロジックは変更不要な想定。
-   新しい駅セットを追加する場合は、ここに1エントリ足すだけでよい。
-   詳しい手順は timetable-template.md を参照。 */
-const STATION_SET_ADAPTERS = {
-  meguro_down(entries, destLabel){
-    // 目黒駅 南北線・三田線方面: 実データは目黒発だが、列車としては新横浜発として
-    // 逆算アンカーする(新横浜〜目黒間はまだ実データ未収集のため各停想定の暫定値)。
-    const MEG_OFFSET = joinPaths(P_SH, P_COR, P_MG).slice(-1)[0][1];
-    function branchPath(code){
-      if(code==="高") return truncTo(P_I, "高島平");
-      if(code==="神") return truncTo(P_N, "王子神谷");
-      if(code==="")   return P_I;   // 西高島平(三田線 全区間)
-      return P_N;                    // 赤・浦・鳩 → 南北線(当アプリの対象区間は赤羽岩淵まで)
-    }
-    function branchLine(code){ return (code==="高"||code==="") ? "I" : "N"; }
-    entries.forEach(([h,m,code])=>{
-      const megDep = h*60+m;
-      const path = joinPaths(P_SH, P_COR, P_MG, P_SHD, branchPath(code));
-      makeTrain(path, megDep-MEG_OFFSET, "loc", branchLine(code), destLabel[code], "新横浜", "nb");
-    });
-  },
-  shirokane_up(entries, destLabel){
-    // 白金高輪駅 目黒方面(→目黒線→新横浜線): 白金高輪発をそのまま列車の起点とする。
-    const SB_FULL_PATH = joinPaths(reversePath(P_SHD), reversePath(P_MG), reversePath(P_COR), reversePath(P_SH));
-    function branchPath(code){
-      if(code==="武") return truncTo(SB_FULL_PATH, "武蔵小杉");
-      if(code==="奥") return truncTo(SB_FULL_PATH, "奥沢");
-      if(code==="")   return truncTo(SB_FULL_PATH, "日吉");
-      return SB_FULL_PATH; // 浜・海・湘・大・谷 → 新横浜まで(相鉄線内はスコープ外)
-    }
-    entries.forEach(([h,m,code,isExp])=>{
-      const shDep = h*60+m;
-      const path = branchPath(code);
-      let kind = isExp ? "exp" : "loc";
-      if(kind==="exp" && EXP_SKIP.has(path[path.length-1][0])) kind = "loc"; // 終着駅が通過駅設定と矛盾しないよう保険
-      makeTrain(path, shDep, kind, "MG", destLabel[code], "白金高輪", "sb");
-    });
-  }
-};
-function applyRealData(stationSets){
-  if(!stationSets) return;
-  Object.keys(stationSets).forEach(key=>{
-    const adapter = STATION_SET_ADAPTERS[key];
-    const set = stationSets[key];
-    if(!adapter){ console.warn("どれトレ: 未対応の駅セットです(index.html側にアダプタが必要):", key); return; }
-    adapter(set.entries, set.destLabel);
-  });
-}
 function parseTimeStr(v){
   if(typeof v !== "string") return null;
   const m = v.match(/^(\d{1,2}):(\d{2})$/);
@@ -632,9 +526,15 @@ function makeTrainFromRecord(rec){
     return [s.station, a, d];
   }).filter(Boolean);
   if(stops.length < 2) return;
-  const refList = rec.branch === "I" ? FULL_I_NAMES : FULL_N_NAMES;
-  const i0 = refList.indexOf(stops[0][0]), i1 = refList.indexOf(stops[stops.length-1][0]);
-  const dir = (i0 !== -1 && i1 !== -1 && i0 > i1) ? "sb" : "nb";
+  let dir = rec.dir; // インプットツールで明示的に指定された方向を優先
+  if(dir !== "nb" && dir !== "sb"){
+    // 明示指定が無い場合のみ推測(後方互換): 系統の東側終端駅への駅数で判定
+    const branchDef = NETWORK.branches[rec.branch];
+    const anchor = branchDef ? branchDef.eastAnchor : "浦和美園";
+    const dist = netBfsDist(anchor);
+    const d0 = dist.get(stops[0][0]), d1 = dist.get(stops[stops.length-1][0]);
+    dir = (d0 != null && d1 != null && d1 > d0) ? "sb" : "nb";
+  }
   TRAINS.push({
     id:"T"+TRAINS.length, kind: rec.type==="exp" ? "exp" : "loc",
     branch: rec.branch, dest: rec.dest, origin: rec.origin, dir, stops
@@ -649,19 +549,7 @@ function applyTrainsArray(trains){
 const TRAINS = [];
 const stationDeps = new Map(); // 駅名 → [ [発時刻, train, stopIdx] ... ] 発時刻順
 
-function makeTrain(path, dep, kind, branch, dest, origin, dir){
-  const stops = [];
-  let skip = 0;
-  for(const [n,c] of path){
-    if(kind==="exp" && EXP_SKIP.has(n)){ skip += 0.5; continue; }
-    const t = Math.round(dep + c - skip);
-    stops.push([n, t, t]); // [駅名, 着, 発](推定値のため着=発)
-  }
-  if(stops.length < 2) return;
-  TRAINS.push({ id:"T"+TRAINS.length, kind, branch, dest, origin, dir, stops });
-}
-function generateTimetable(stationSets, trainsArray){
-  applyRealData(stationSets);
+function generateTimetable(trainsArray){
   applyTrainsArray(trainsArray);
   /* 駅別発車インデックスを構築(乗車できるのは「発」の時刻から) */
   TRAINS.forEach(tr=>{
@@ -745,7 +633,9 @@ function chainToLegs(chain){
 }
 
 function findCandidates(from, to, nowMin){
-  const deps = (stationDeps.get(from) || []).filter(d=>d[0] >= nowMin && directionOK(d[1], d[2], from, to));
+  const distMap = netBfsDist(to);
+  if(!distMap.has(from)) return [];
+  const deps = (stationDeps.get(from) || []).filter(d=>d[0] >= nowMin && dirTowards(d[1], d[2], distMap));
   const out = [];
   for(const [d, tr, idx] of deps){
     if(out.length >= 5) break;
@@ -794,7 +684,9 @@ function findCandidates(from, to, nowMin){
 }
 
 function findCandidatesByArrival(from, to, targetArrMin){
-  const deps = (stationDeps.get(from) || []).filter(d=>d[0] <= targetArrMin && directionOK(d[1], d[2], from, to));
+  const distMap = netBfsDist(to);
+  if(!distMap.has(from)) return [];
+  const deps = (stationDeps.get(from) || []).filter(d=>d[0] <= targetArrMin && dirTowards(d[1], d[2], distMap));
   const out = [];
   for(const [d, tr, idx] of deps){
     const r = bestArrival(tr, idx, to, MAX_TRANSFERS, new Map());
@@ -1211,13 +1103,11 @@ function loadJSON(url){
     .catch(e => { console.warn("どれトレ: "+url+" の読み込みに失敗しました", e); return null; });
 }
 
-Promise.all([
-  loadJSON("./timetable-data.json"),   // stationSets(目黒・白金高輪の実データ。ほぼ更新しない)
-  loadJSON("./trains-input.json")      // trains配列(インプットツールの書き出しをそのまま配置)
-]).then(([base, extra]) => {
-  const stationSets = base ? base.stationSets : null;
-  const trains = extra ? extra.trains : null;
-  generateTimetable(stationSets, trains);
+/* 時刻表データは trains-input.json 1ファイルのみ。
+   インプットツールの「JSONをダウンロード」で書き出したファイルを
+   この名前でそのまま上書きアップロードすれば反映される。 */
+loadJSON("./trains-input.json").then(data => {
+  generateTimetable(data ? data.trains : null);
 }).finally(() => {
   renderHome();
   renderRoutes();
