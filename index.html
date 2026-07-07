@@ -379,7 +379,7 @@
       </div>
 
       <!-- ── ADD ROUTE SHEET ── -->
-      <div class="dim" id="dim" onclick="closeSheet()"></div>
+      <div class="dim" id="dim" onclick="closeSheet();closeTimeSheet();"></div>
       <div class="sheet" id="sheet">
         <div class="grabber"></div>
         <div class="sheet-head">
@@ -406,6 +406,39 @@
           </div>
           <p class="footnote" style="padding:14px 4px 18px;">登録した経路は起動時にすぐ表示され、次に乗るべき電車を案内します。</p>
           <button class="btn-filled" id="saveRouteBtn" disabled onclick="saveRoute()">経路を保存</button>
+        </div>
+      </div>
+
+      <!-- ── TIME SETTING SHEET ── -->
+      <div class="sheet" id="timeSheet">
+        <div class="grabber"></div>
+        <div class="sheet-head">
+          <button class="nav-btn" style="padding-left:0;" onclick="closeTimeSheet()">キャンセル</button>
+          <h2>検索条件</h2>
+          <span style="width:74px;"></span>
+        </div>
+        <div class="sheet-body">
+          <div class="section-header" style="padding-top:8px;">基準時刻</div>
+          <div class="group">
+            <div class="cell" onclick="setTimeMode('now')" style="cursor:pointer;">
+              <div class="main"><div class="title">現在時刻</div></div>
+              <div class="check" id="chkNow">✓</div>
+            </div>
+            <div class="cell" onclick="setTimeMode('depart')" style="cursor:pointer;">
+              <div class="main"><div class="title">出発時刻を指定</div></div>
+              <div class="check" id="chkDepart">✓</div>
+            </div>
+            <div class="cell" onclick="setTimeMode('arrive')" style="cursor:pointer;">
+              <div class="main"><div class="title">到着時刻を指定</div></div>
+              <div class="check" id="chkArrive">✓</div>
+            </div>
+          </div>
+          <div class="section-header" id="timeInputHeader" style="display:none;">時刻</div>
+          <div class="group" id="timeInputGroup" style="display:none;padding:12px 16px;">
+            <input type="time" id="timeInputValue" style="width:100%;border:none;font-size:22px;font-family:inherit;color:var(--label);background:transparent;text-align:center;">
+          </div>
+          <p class="footnote" id="timeSheetHint" style="padding:14px 4px 18px;">現在時刻をもとに、次に乗るべき電車を案内します。</p>
+          <button class="btn-filled" onclick="applyTimeSetting()">適用</button>
         </div>
       </div>
 
@@ -567,55 +600,8 @@ function makeTrain(path, dep, kind, branch, dest, origin, dir){
   if(stops.length < 2) return;
   TRAINS.push({ id:"T"+TRAINS.length, kind, branch, dest, origin, dir, stops });
 }
-function headway(t){
-  const h = Math.floor(t/60);
-  if((h>=7&&h<9)||(h>=17&&h<19)) return 8;   // ラッシュ
-  if(h<6||h>=22) return 15;                   // 早朝・深夜
-  return 10;                                  // 日中
-}
 function generateTimetable(stationSets){
-  const RI  = reversePath(FULL.I);
-  const RN  = reversePath(FULL.N);
-  const RTY = reversePath(FULL.TY);
-  const N_fromHiyoshi   = sliceFrom(FULL.N, "日吉");
-  const N_fromShirokane = sliceFrom(FULL.N, "白金高輪");
-  const RN_toShirokane  = truncTo(RN, "白金高輪");
-  const RTY_fromDen     = sliceFrom(RTY, "田園調布");
-
-  /* 実データ帯(目黒駅)の時間範囲: この範囲は新横浜発の生成ダイヤ(nb)と
-     重複させない。データが無ければ範囲なし(=常に生成ダイヤを使う)。 */
-  let REAL_MIN = Infinity, REAL_MAX = -Infinity;
-  if(stationSets && stationSets.meguro_down){
-    const offset = joinPaths(P_SH, P_COR, P_MG).slice(-1)[0][1];
-    stationSets.meguro_down.entries.forEach(([h,m])=>{
-      const d = h*60+m-offset;
-      if(d < REAL_MIN) REAL_MIN = d;
-      if(d > REAL_MAX) REAL_MAX = d;
-    });
-  }
-
   applyRealData(stationSets);
-
-  let t = 5*60;
-  while(t < 23*60+30){
-    const inRealWindow = t >= REAL_MIN && t <= REAL_MAX;
-    /* ── 上り(新横浜 → 都心): 実データ帯の時間は上で生成済みなので重複させない ── */
-    if(!inRealWindow){
-      makeTrain(FULL.I,          t,    "exp","I", "西高島平","新横浜","nb");   // 三田線直通 急行
-      makeTrain(FULL.N,          t+4,  "loc","N", "赤羽岩淵","新横浜","nb");   // 南北線直通 各停
-      makeTrain(N_fromHiyoshi,   t+15, "exp","N", "赤羽岩淵","日吉","nb");     // 日吉始発 急行
-      makeTrain(N_fromShirokane, t+29, "loc","N", "赤羽岩淵","白金高輪","nb"); // 白金高輪始発(三田線急行から対面接続)
-    }
-    makeTrain(FULL.TY,         t+7,  "loc","TY","渋谷",    "新横浜","nb");   // 東横線直通(並走区間のみ利用可・引き続き生成ダイヤ)
-    /* ── 下り(都心 → 新横浜): 実データ帯でも上流(西高島平・赤羽岩淵→白金高輪)を
-       担う列車として引き続き生成。白金高輪は乗換0分駅なので、実データの
-       白金高輪発列車への対面乗り換えは探索エンジンが自動的に考慮する。 */
-    makeTrain(RI,              t,    "exp","I", "新横浜",  "西高島平","sb"); // 三田線から新横浜行き 急行
-    makeTrain(RN,              t+4,  "loc","N", "新横浜",  "赤羽岩淵","sb"); // 南北線から新横浜行き 各停
-    makeTrain(RN_toShirokane,  t+7,  "loc","N", "白金高輪","赤羽岩淵","sb"); // 白金高輪止まり(三田線新横浜行きへ対面接続)
-    makeTrain(RTY_fromDen,     t+9,  "loc","TY","新横浜",  "渋谷",  "sb");   // 東横線から新横浜線直通(引き続き生成ダイヤ)
-    t += headway(t);
-  }
   /* 駅別発車インデックスを構築 */
   TRAINS.forEach(tr=>{
     tr.stops.forEach(([n,tm],i)=>{
@@ -746,8 +732,41 @@ function findCandidates(from, to, nowMin){
   });
 }
 
+function findCandidatesByArrival(from, to, targetArrMin){
+  const deps = (stationDeps.get(from) || []).filter(d=>d[0] <= targetArrMin);
+  const out = [];
+  for(const [d, tr, idx] of deps){
+    const r = bestArrival(tr, idx, to, MAX_TRANSFERS, new Map());
+    if(!r || r.arr > targetArrMin) continue;
+    out.push({ depMin:d, arrMin:r.arr, chain:r.chain, train:tr });
+  }
+  if(out.length===0) return [];
+  /* 到着時刻指定なので、指定時刻に間に合う中で最も遅い発車(=最も便利)のものを上位に */
+  out.sort((a,b)=> b.depMin - a.depMin);
+  const top = out.slice(0, 5);
+  const maxArr = Math.max(...top.map(c=>c.arrMin));
+  return top.map((c,i)=>{
+    const fastest = i === 0; // 最も遅く出て、指定時刻に間に合う一本
+    const note = fastest
+      ? "指定時刻に間に合う中で最も遅く出発できます"
+      : (maxArr - c.arrMin) + "分早く到着(念のため早めに動きたい場合)";
+    return {
+      dep: fmt(c.depMin), arr: fmt(c.arrMin),
+      depMin: c.depMin, arrMin: c.arrMin,
+      dur: c.arrMin - c.depMin,
+      tr: c.chain.length - 1,
+      wait: c.depMin - nowMinutes(),
+      line: stationLine(from, c.train),
+      type: typeLabel(c.train),
+      dest: c.train.dest + "行",
+      fastest, note,
+      legs: chainToLegs(c.chain)
+    };
+  });
+}
+
 /* ═════════ 状態・永続化 ═════════ */
-const STORAGE_KEY = "doretore.state.v2"; // データモデル刷新のためバージョンアップ
+const STORAGE_KEY = "doretore.state.v3"; // 仮データ撤去のため保存データをリセット
 function loadPersisted(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -777,10 +796,9 @@ let state = {
   dark:false, editing:false, selectedRoute:0, pendingDelete:null,
   pickFrom:null, pickTo:null,
   currentCands: [],
-  routes: [
-    {from:"新横浜", to:"飯田橋"},
-    {from:"飯田橋", to:"新横浜"}
-  ]
+  searchMode:"now", searchTimeMin:null, // "now" | "depart" | "arrive"
+  pendingTimeMode:"now",
+  routes: []
 };
 
 /* ═════════ helpers ═════════ */
@@ -810,10 +828,19 @@ function renderHome(){
   }
   if(state.selectedRoute >= state.routes.length) state.selectedRoute = 0;
   const r = state.routes[state.selectedRoute];
-  let now = nowMinutes();
-  let cands = findCandidates(r.from, r.to, now);
-  let tomorrow = false;
-  if(cands.length===0){ cands = findCandidates(r.from, r.to, 5*60); tomorrow = true; }
+  const now = nowMinutes();
+  let cands, tomorrow = false, modeLabel;
+  if(state.searchMode === "depart"){
+    cands = findCandidates(r.from, r.to, state.searchTimeMin);
+    modeLabel = fmt(state.searchTimeMin) + " 出発で検索中";
+  }else if(state.searchMode === "arrive"){
+    cands = findCandidatesByArrival(r.from, r.to, state.searchTimeMin);
+    modeLabel = fmt(state.searchTimeMin) + " 到着希望で検索中";
+  }else{
+    cands = findCandidates(r.from, r.to, now);
+    if(cands.length===0){ cands = findCandidates(r.from, r.to, 5*60); tomorrow = true; }
+    modeLabel = "現在時刻で検索中";
+  }
   state.currentCands = cands;
 
   let html = '<div class="chips">';
@@ -821,9 +848,16 @@ function renderHome(){
     html += '<button class="chip'+(i===state.selectedRoute?' on':'')+'" onclick="selectRoute('+i+')">'+rt.from+' → '+rt.to+'</button>';
   });
   html += '</div>';
+  html += '<div class="cell" onclick="openTimeSheet()" style="background:var(--card);border-radius:10px;margin-bottom:14px;cursor:pointer;">'+
+    '<div class="badge" style="background:var(--blue);">'+
+      '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="7" cy="7" r="5.2"/><path d="M7 4v3.2l2 1.4"/></svg>'+
+    '</div>'+
+    '<div class="main"><div class="title" style="font-size:15px;font-weight:600;">'+modeLabel+'</div></div>'+
+    '<div class="chevron">›</div>'+
+  '</div>';
 
   if(cands.length===0){
-    html += '<div class="empty"><h3>経路が見つかりません</h3><p>この2駅間はネットワーク対象外の可能性があります。</p></div>';
+    html += '<div class="empty"><h3>経路が見つかりません</h3><p>指定した時刻の前後に該当する電車がないか、この2駅間はネットワーク対象外の可能性があります。</p></div>';
     c.innerHTML = html; return;
   }
 
@@ -854,7 +888,7 @@ function renderHome(){
       '</div>';
   });
   html += '</div>';
-  html += '<p class="caption" style="padding:14px 4px;">'+(tomorrow?'本日の運行は終了しています(明朝5時台以降を表示)。':fmt(now)+' 現在のダイヤに基づく案内。')+'時刻はデモ用の生成データです。</p>';
+  html += '<p class="caption" style="padding:14px 4px;">'+(tomorrow?'本日の運行は終了しています(明朝5時台以降を表示)。':modeLabel+'('+fmt(now)+'現在)。')+'収録済みの実データ範囲内のみ検索できます。</p>';
   c.innerHTML = html;
 }
 function selectRoute(i){ state.selectedRoute = i; persist(); renderHome(); }
@@ -1025,6 +1059,49 @@ function openSheet(){
 function closeSheet(){
   $("dim").classList.remove("show");
   $("sheet").classList.remove("show");
+}
+
+/* ═════════ 検索条件(出発/到着時刻)シート ═════════ */
+function setTimeMode(mode){
+  state.pendingTimeMode = mode;
+  ["Now","Depart","Arrive"].forEach(k=>{
+    $("chk"+k).style.visibility = (mode === k.toLowerCase()) ? "visible" : "hidden";
+  });
+  const showInput = mode !== "now";
+  $("timeInputHeader").style.display = showInput ? "block" : "none";
+  $("timeInputGroup").style.display = showInput ? "block" : "none";
+  $("timeSheetHint").textContent = mode === "now"
+    ? "現在時刻をもとに、次に乗るべき電車を案内します。"
+    : mode === "depart"
+      ? "指定した時刻以降で、最初に乗れる電車から案内します。"
+      : "指定した時刻までに到着できる、最も遅い出発の電車を案内します。";
+}
+function openTimeSheet(){
+  state.pendingTimeMode = state.searchMode;
+  const initMin = state.searchTimeMin != null ? state.searchTimeMin : nowMinutes();
+  $("timeInputValue").value = fmt(initMin);
+  setTimeMode(state.searchMode);
+  $("dim").classList.add("show");
+  $("timeSheet").classList.add("show");
+}
+function closeTimeSheet(){
+  $("dim").classList.remove("show");
+  $("timeSheet").classList.remove("show");
+}
+function applyTimeSetting(){
+  const mode = state.pendingTimeMode;
+  if(mode === "now"){
+    state.searchMode = "now";
+    state.searchTimeMin = null;
+  }else{
+    const v = $("timeInputValue").value; // "HH:MM"
+    if(!v){ alert("時刻を入力してください"); return; }
+    const [hh,mm] = v.split(":").map(Number);
+    state.searchMode = mode;
+    state.searchTimeMin = hh*60+mm;
+  }
+  closeTimeSheet();
+  renderHome();
 }
 function saveRoute(){
   const exists = state.routes.some(r=>r.from===state.pickFrom && r.to===state.pickTo);
