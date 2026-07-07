@@ -500,7 +500,50 @@ const EXP_SKIP = new Set(["元住吉","新丸子","多摩川","奥沢","洗足",
 /* 駅選択リスト(順序: 三田線系統 → 南北線) */
 const STATIONS = [...FULL.I.map(x=>x[0]), ...P_N.slice(1).map(x=>x[0])];
 
-/* ═════════ 終日ダイヤ生成(平日・デモ用) ═════════ */
+/* ═════════ 実データ: 目黒駅(I01) 平日 西高島平・赤羽岩淵方面 ═════════
+   出典: 東京都交通局 目黒駅 時刻表(令和8年3月16日改正)
+   https://www.kotsu.metro.tokyo.jp/subway/timetable/mita/I01ND.html
+   まずは朝ラッシュ帯(6:00〜9:59)のみ実データを反映。それ以外の時間帯と
+   新横浜〜目黒間の詳細、および反対方向(都心→新横浜)は、実データ収集が
+   済むまでの暫定値として引き続き生成ダイヤを使う。 */
+const MEGURO_REAL = [
+  // [時, 分, 行先コード]
+  // ""=西高島平(三田線) "高"=高島平(三田線) "赤"=赤羽岩淵(南北線)
+  // "浦"=浦和美園(南北線、赤羽岩淵より先) "鳩"=鳩ヶ谷(同) "神"=王子神谷(南北線、赤羽岩淵より手前)
+  [5,12,""],[5,16,"浦"],[5,25,""],[5,38,"浦"],[5,47,"浦"],[5,52,""],
+  [6,0,"浦"],[6,3,""],[6,9,"浦"],[6,19,""],[6,21,"浦"],[6,29,"浦"],[6,32,""],[6,39,"浦"],[6,47,""],[6,50,"浦"],[6,55,""],[6,59,"浦"],
+  [7,2,""],[7,5,""],[7,7,"浦"],[7,11,"浦"],[7,13,""],[7,16,"鳩"],[7,20,""],[7,22,"浦"],[7,25,""],[7,29,"浦"],[7,32,""],[7,35,"鳩"],[7,39,""],[7,42,"浦"],[7,45,""],[7,47,"鳩"],[7,50,""],[7,52,"浦"],[7,55,"鳩"],[7,57,""],
+  [8,0,"浦"],[8,3,"鳩"],[8,6,""],[8,8,"浦"],[8,11,""],[8,13,"高"],[8,16,"鳩"],[8,18,""],[8,21,"神"],[8,23,"浦"],[8,26,"高"],[8,28,"鳩"],[8,31,"高"],[8,33,""],[8,36,"浦"],[8,38,"高"],[8,41,"浦"],[8,43,"鳩"],[8,45,"高"],[8,48,""],[8,50,"浦"],[8,55,""],[8,58,"鳩"],
+  [9,1,""],[9,4,"浦"],[9,8,""],[9,11,"高"],[9,13,"鳩"],[9,18,"高"],[9,20,"鳩"],[9,23,""],[9,28,"浦"],[9,31,""],[9,34,"高"],[9,38,""],[9,41,"浦"],[9,45,"高"],[9,49,""],[9,53,"浦"],[9,57,""],
+  [10,4,""],[10,8,""],[10,11,"浦"],[10,18,""],[10,22,"浦"],[10,27,""],[10,32,""],[10,37,""],[10,40,"赤"],[10,47,""],[10,51,"赤"],[10,55,""]
+];
+const MEGURO_DEST_LABEL = {"":"西高島平","高":"高島平","赤":"赤羽岩淵","浦":"浦和美園","鳩":"鳩ヶ谷","神":"王子神谷"};
+function meguroBranchPath(code){
+  if(code==="高") return truncTo(P_I, "高島平");
+  if(code==="神") return truncTo(P_N, "王子神谷");
+  if(code==="")   return P_I;   // 西高島平(三田線 全区間)
+  return P_N;                    // 赤・浦・鳩 → 南北線(当アプリの対象区間は赤羽岩淵まで)
+}
+function meguroBranchLine(code){ return (code==="高"||code==="") ? "I" : "N"; }
+
+/* ═════════ 実データ: 白金高輪駅(N03) 平日 目黒方面(→目黒線→新横浜線) ═════════
+   出典: ユーザー提供PDF「白金高輪駅 時刻表」(2026年3月改正)。座標・文字色情報を
+   プログラムで解析し、分・行先コード・急行(赤字)を機械的に抽出(目視のみに頼らず検証済み)。
+   行先コード: ""=日吉 "武"=武蔵小杉 "奥"=奥沢 "浜"=新横浜
+              "海"=海老名 "湘"=湘南台 "大"=大和 "谷"=西谷(海・湘・大・谷は新横浜より先、相鉄線内直通)
+   最後の値はtrue/falseで急行(赤字)フラグ。朝ラッシュ帯(5:00〜10:59)のみ実データ化。
+   無印(日吉行)は新横浜線区間まで届かない点に注意(以前の生成ダイヤの前提より現実的)。 */
+const SHIROKANE_SB_REAL = [
+  [5,10,"浜",false],[5,21,"",false],[5,36,"浜",true],[5,44,"",false],[5,51,"",false],
+  [6,0,"浜",false],[6,9,"",false],[6,19,"湘",true],[6,22,"",false],[6,28,"浜",false],[6,32,"",false],[6,35,"",false],[6,43,"",false],[6,47,"",false],[6,50,"海",true],[6,53,"浜",false],[6,57,"",false],
+  [7,0,"",false],[7,2,"浜",false],[7,5,"",false],[7,8,"海",true],[7,11,"",false],[7,13,"湘",false],[7,16,"浜",false],[7,19,"武",false],[7,22,"",false],[7,25,"浜",false],[7,28,"",false],[7,31,"",false],[7,34,"大",true],[7,37,"浜",false],[7,40,"武",true],[7,43,"",false],[7,46,"海",false],[7,49,"",false],[7,52,"湘",false],[7,56,"",true],[7,59,"",false],
+  [8,1,"武",true],[8,4,"",false],[8,6,"浜",true],[8,9,"",false],[8,12,"",true],[8,15,"武",false],[8,18,"武",false],[8,20,"浜",true],[8,23,"",false],[8,25,"",false],[8,28,"武",false],[8,30,"浜",false],[8,33,"武",false],[8,35,"",false],[8,38,"海",true],[8,41,"浜",false],[8,43,"武",false],[8,45,"谷",true],[8,48,"",false],[8,51,"浜",false],[8,53,"",false],[8,56,"海",true],[8,59,"武",false],
+  [9,1,"",false],[9,5,"",true],[9,8,"武",false],[9,11,"武",false],[9,14,"",false],[9,17,"武",false],[9,19,"",false],[9,23,"海",true],[9,27,"武",false],[9,30,"浜",false],[9,33,"武",false],[9,36,"",false],[9,40,"浜",false],[9,45,"大",false],[9,49,"",false],[9,55,"海",true],
+  [10,1,"武",false],[10,6,"武",false],[10,11,"谷",true],[10,16,"",false],[10,21,"武",false],[10,24,"海",true],[10,29,"",false],[10,34,"",false],[10,39,"浜",true],[10,46,"武",false],[10,51,"浜",false],[10,54,"海",true],[10,59,"",false]
+];
+const SHIROKANE_DEST_LABEL = {"":"日吉","武":"武蔵小杉","奥":"奥沢","浜":"新横浜","海":"海老名","湘":"湘南台","大":"大和","谷":"西谷"};
+
+/* ═════════ 終日ダイヤ生成(平日) ═════════ */
 const TRAINS = [];
 const stationDeps = new Map(); // 駅名 → [ [発時刻, train, stopIdx] ... ] 発時刻順
 
@@ -528,19 +571,54 @@ function headway(t){
   const N_fromShirokane = sliceFrom(FULL.N, "白金高輪");
   const RN_toShirokane  = truncTo(RN, "白金高輪");
   const RTY_fromDen     = sliceFrom(RTY, "田園調布");
+  const MEG_OFFSET = joinPaths(P_SH, P_COR, P_MG).slice(-1)[0][1]; // 新横浜→目黒(各停・分)
+  const realDeps = MEGURO_REAL.map(([h,m])=>h*60+m-MEG_OFFSET);
+  const REAL_MIN = Math.min(...realDeps), REAL_MAX = Math.max(...realDeps);
+
+  const SB_FULL_PATH = joinPaths(reversePath(P_SHD), reversePath(P_MG), reversePath(P_COR), reversePath(P_SH)); // 白金高輪→新横浜
+  function shirokaneBranchPath(code){
+    if(code==="武") return truncTo(SB_FULL_PATH, "武蔵小杉");
+    if(code==="奥") return truncTo(SB_FULL_PATH, "奥沢");
+    if(code==="")   return truncTo(SB_FULL_PATH, "日吉");
+    return SB_FULL_PATH; // 浜・海・湘・大・谷 → 新横浜まで(相鉄線内はスコープ外)
+  }
+  const sbRealDeps = SHIROKANE_SB_REAL.map(([h,m])=>h*60+m);
+
+  /* 実データ帯(目黒駅の実際の行先パターン): 新横浜〜目黒間は各停想定で逆算
+     (この区間はまだ実データ未収集のための暫定)。 */
+  MEGURO_REAL.forEach(([h,m,code])=>{
+    const megDep = h*60+m;
+    const path = joinPaths(P_SH, P_COR, P_MG, P_SHD, meguroBranchPath(code));
+    makeTrain(path, megDep-MEG_OFFSET, "loc", meguroBranchLine(code), MEGURO_DEST_LABEL[code], "新横浜", "nb");
+  });
+
+  /* 実データ帯(白金高輪駅発 目黒方面の実際の行先パターン・急行表示込み) */
+  SHIROKANE_SB_REAL.forEach(([h,m,code,isExp])=>{
+    const shDep = h*60+m;
+    const path = shirokaneBranchPath(code);
+    let kind = isExp ? "exp" : "loc";
+    if(kind==="exp" && EXP_SKIP.has(path[path.length-1][0])) kind = "loc"; // 終着駅が通過駅設定と矛盾しないよう保険
+    makeTrain(path, shDep, kind, "MG", SHIROKANE_DEST_LABEL[code], "白金高輪", "sb");
+  });
+
   let t = 5*60;
   while(t < 23*60+30){
-    /* ── 上り(新横浜 → 都心) ── */
-    makeTrain(FULL.I,          t,    "exp","I", "西高島平","新横浜","nb");   // 三田線直通 急行
-    makeTrain(FULL.N,          t+4,  "loc","N", "赤羽岩淵","新横浜","nb");   // 南北線直通 各停
-    makeTrain(FULL.TY,         t+7,  "loc","TY","渋谷",    "新横浜","nb");   // 東横線直通(並走区間のみ利用可)
-    makeTrain(N_fromHiyoshi,   t+15, "exp","N", "赤羽岩淵","日吉","nb");     // 日吉始発 急行
-    makeTrain(N_fromShirokane, t+29, "loc","N", "赤羽岩淵","白金高輪","nb"); // 白金高輪始発(三田線急行から対面接続)
-    /* ── 下り(都心 → 新横浜) ── */
+    const inRealWindow = t >= REAL_MIN && t <= REAL_MAX;
+    /* ── 上り(新横浜 → 都心): 実データ帯の時間は上で生成済みなので重複させない ── */
+    if(!inRealWindow){
+      makeTrain(FULL.I,          t,    "exp","I", "西高島平","新横浜","nb");   // 三田線直通 急行
+      makeTrain(FULL.N,          t+4,  "loc","N", "赤羽岩淵","新横浜","nb");   // 南北線直通 各停
+      makeTrain(N_fromHiyoshi,   t+15, "exp","N", "赤羽岩淵","日吉","nb");     // 日吉始発 急行
+      makeTrain(N_fromShirokane, t+29, "loc","N", "赤羽岩淵","白金高輪","nb"); // 白金高輪始発(三田線急行から対面接続)
+    }
+    makeTrain(FULL.TY,         t+7,  "loc","TY","渋谷",    "新横浜","nb");   // 東横線直通(並走区間のみ利用可・引き続き生成ダイヤ)
+    /* ── 下り(都心 → 新横浜): 実データ帯でも上流(西高島平・赤羽岩淵→白金高輪)を
+       担う列車として引き続き生成。白金高輪は乗換0分駅なので、実データの
+       白金高輪発列車への対面乗り換えは探索エンジンが自動的に考慮する。 */
     makeTrain(RI,              t,    "exp","I", "新横浜",  "西高島平","sb"); // 三田線から新横浜行き 急行
     makeTrain(RN,              t+4,  "loc","N", "新横浜",  "赤羽岩淵","sb"); // 南北線から新横浜行き 各停
     makeTrain(RN_toShirokane,  t+7,  "loc","N", "白金高輪","赤羽岩淵","sb"); // 白金高輪止まり(三田線新横浜行きへ対面接続)
-    makeTrain(RTY_fromDen,     t+9,  "loc","TY","新横浜",  "渋谷",  "sb");   // 東横線から新横浜線直通
+    makeTrain(RTY_fromDen,     t+9,  "loc","TY","新横浜",  "渋谷",  "sb");   // 東横線から新横浜線直通(引き続き生成ダイヤ)
     t += headway(t);
   }
   /* 駅別発車インデックスを構築 */
