@@ -2,13 +2,22 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>どれトレ — iOS Prototype</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="どれトレ">
+<meta name="theme-color" content="#DA0442">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<title>どれトレ</title>
 <style>
   :root{
     --blue:#007AFF; --green:#34C759; --red:#FF3B30; --orange:#FF9500; --gray:#8E8E93;
     --tint:#DA0442; /* 東急東横線レッドをtintに */
     --ty:#DA0442; --mg:#009CD2; --sh:#8F76D6; --mita:#0079C2; --nam:#00AC9A; --fuku:#9C5E31;
+    --safe-t: env(safe-area-inset-top, 20px);
+    --safe-b: env(safe-area-inset-bottom, 0px);
   }
   .screen{
     --bg:#F2F2F7; --card:#FFFFFF; --label:#000000; --label2:rgba(60,60,67,0.6);
@@ -23,38 +32,16 @@
     --heroTop:#7A0025; --heroBottom:#B4003A;
   }
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-  html,body{height:100%;}
+  html,body{height:100%;overscroll-behavior:none;}
   body{
     font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Hiragino Sans","Hiragino Kaku Gothic ProN",sans-serif;
-    background:linear-gradient(160deg,#1b1b21 0%,#2a2a33 100%);
-    display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;
-    letter-spacing:-0.2px;
+    letter-spacing:-0.2px;overflow:hidden;
   }
-  /* ── iPhone 15 Pro frame ── */
-  .phone{
-    width:393px;height:852px;border-radius:55px;position:relative;flex:none;
-    background:#000;box-shadow:0 0 0 3px #3a3a3f,0 0 0 5px #17171a,0 30px 80px rgba(0,0,0,0.6);
-    overflow:hidden;
-  }
+  /* ── full-screen app shell (replaces the mock iPhone frame used for chat previews) ── */
   .screen{
-    position:absolute;inset:3px;border-radius:52px;overflow:hidden;background:var(--bg);
-    color:var(--label);transition:background 0.3s;
-  }
-  .island{
-    position:absolute;top:11px;left:50%;transform:translateX(-50%);
-    width:125px;height:36px;background:#000;border-radius:20px;z-index:60;
-  }
-  .statusbar{
-    position:absolute;top:0;left:0;right:0;height:59px;z-index:55;
-    display:flex;align-items:center;justify-content:space-between;
-    padding:18px 32px 0 40px;pointer-events:none;
-  }
-  .statusbar .time{font-size:16px;font-weight:600;letter-spacing:-0.3px;}
-  .statusbar svg{display:block;}
-  .statusbar .sicons{display:flex;align-items:center;gap:7px;}
-  .home-indicator{
-    position:absolute;bottom:8px;left:50%;transform:translateX(-50%);
-    width:140px;height:5px;border-radius:3px;background:var(--label);opacity:0.3;z-index:60;
+    position:fixed;inset:0;overflow:hidden;background:var(--bg);color:var(--label);
+    transition:background 0.3s;
+    height:100dvh;
   }
   /* ── page layout ── */
   .viewport{position:absolute;inset:0;overflow:hidden;}
@@ -64,12 +51,12 @@
   .page.active{display:flex;}
   .content{
     flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
-    padding:156px 16px 110px;scrollbar-width:none;
+    padding:calc(var(--safe-t) + 97px) 16px calc(var(--safe-b) + 78px);scrollbar-width:none;
   }
   .content::-webkit-scrollbar{display:none;}
   /* ── navigation bar ── */
   .nav{
-    position:absolute;top:0;left:0;right:0;z-index:40;padding-top:59px;
+    position:absolute;top:0;left:0;right:0;z-index:40;padding-top:var(--safe-t);
     background:transparent;transition:background 0.25s;
   }
   .nav .bar{
@@ -96,7 +83,7 @@
     box-shadow:-8px 0 24px rgba(0,0,0,0.18);
   }
   .push-page.open{transform:translateX(0);}
-  .push-page .nav{padding-top:59px;}
+  .push-page .nav{padding-top:var(--safe-t);}
   /* ── typography helpers ── */
   .footnote{font-size:13px;color:var(--label2);}
   .caption{font-size:12px;color:var(--label2);}
@@ -190,9 +177,9 @@
   .sw input:checked~.knob{transform:translateX(20px);}
   /* ── tab bar ── */
   .tabbar{
-    position:absolute;bottom:0;left:0;right:0;height:83px;z-index:50;
+    position:absolute;bottom:0;left:0;right:0;height:calc(49px + var(--safe-b));z-index:50;
     background:var(--tabblur);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);
-    box-shadow:0 -0.5px 0 var(--sep);display:flex;padding-top:6px;
+    box-shadow:0 -0.5px 0 var(--sep);display:flex;padding-top:6px;padding-bottom:var(--safe-b);
   }
   .tab{
     flex:1;border:none;background:none;font-family:inherit;cursor:pointer;
@@ -208,7 +195,7 @@
   }
   .dim.show{opacity:1;pointer-events:auto;}
   .sheet{
-    position:absolute;left:0;right:0;bottom:0;top:64px;z-index:75;background:var(--bg);
+    position:absolute;left:0;right:0;bottom:0;top:calc(var(--safe-t) + 30px);z-index:75;background:var(--bg);
     border-radius:16px 16px 0 0;transform:translateY(105%);
     transition:transform 0.4s cubic-bezier(0.25,0.1,0.25,1);display:flex;flex-direction:column;
     box-shadow:0 -10px 40px rgba(0,0,0,0.3);
@@ -274,19 +261,8 @@
 </style>
 </head>
 <body>
-<div class="phone">
-  <div class="screen" id="screen">
-    <div class="statusbar">
-      <div class="time">9:41</div>
-      <div class="sicons">
-        <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0.5" width="3" height="11.5" rx="1"/></svg>
-        <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor"><path d="M8.5 12 L5.6 8.9 a4.1 4.1 0 0 1 5.8 0 Z"/><path d="M3.5 6.6 a7.3 7.3 0 0 1 10 0 L12 8.2 a5.1 5.1 0 0 0-7 0 Z" opacity="0.95"/><path d="M1.2 4.2 a10.6 10.6 0 0 1 14.6 0 L14.3 5.8 a8.4 8.4 0 0 0-11.6 0 Z" opacity="0.95"/></svg>
-        <svg width="27" height="13" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="22" height="12" rx="3.5" fill="none" stroke="currentColor" opacity="0.4"/><rect x="24" y="4" width="2.5" height="5" rx="1.2" fill="currentColor" opacity="0.4"/><rect x="2" y="2" width="19" height="9" rx="2" fill="currentColor"/></svg>
-      </div>
-    </div>
-    <div class="island"></div>
-
-    <div class="viewport">
+<div class="screen" id="screen">
+  <div class="viewport">
       <div class="tabs-holder" id="tabsHolder">
 
         <!-- ── HOME ── -->
@@ -383,7 +359,7 @@
             <div class="small-title" id="detail-title">経路の詳細</div>
           </div>
         </div>
-        <div class="content" id="detail-content" style="padding-top:118px;"></div>
+        <div class="content" id="detail-content" style="padding-top:calc(var(--safe-t) + 59px);"></div>
       </div>
 
       <!-- ── TAB BAR ── -->
@@ -448,9 +424,7 @@
       </div>
 
     </div><!-- /viewport -->
-    <div class="home-indicator"></div>
-  </div>
-</div>
+  </div><!-- /screen -->
 
 <script>
 "use strict";
@@ -865,6 +839,14 @@ function setDark(on){
 buildPickers();
 renderHome();
 renderRoutes();
+
+/* ───────── service worker registration (PWA offline support) ───────── */
+if("serviceWorker" in navigator){
+  window.addEventListener("load", ()=>{
+    navigator.serviceWorker.register("./sw.js")
+      .catch(e=>console.warn("どれトレ: Service Workerの登録に失敗しました", e));
+  });
+}
 </script>
 </body>
 </html>
