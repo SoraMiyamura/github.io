@@ -509,6 +509,35 @@ const FULL = {
   TY: joinPaths(P_SH, P_COR)                       // 新横浜→(田園調布から東横線渋谷方面へ抜ける)
 };
 
+/* ═════════ 逆方向乗車の除外 ═════════
+   目黒・田園調布などは順方向/逆方向の両方の列車が停まる共用区間のため、
+   「乗車駅から見て目的駅と逆に進む列車」を初期候補から除外する。 */
+const FULL_I_NAMES = FULL.I.map(x=>x[0]);
+const FULL_N_NAMES = FULL.N.map(x=>x[0]);
+const MITA_ONLY_SET = new Set(P_I.slice(1).map(x=>x[0]));
+const NAMBOKU_ONLY_SET = new Set(P_N.slice(1).map(x=>x[0]));
+function branchOf(station){
+  if(MITA_ONLY_SET.has(station)) return "I";
+  if(NAMBOKU_ONLY_SET.has(station)) return "N";
+  return "SHARED"; // 新横浜〜白金高輪の共用区間
+}
+function directionOK(train, idx, from, to){
+  const bFrom = branchOf(from), bTo = branchOf(to);
+  // 出発駅・目的駅が別系統(三田線⇔南北線)にまたがる場合は、まず白金高輪を経由点とみなす
+  const waypoint = (bFrom !== "SHARED" && bTo !== "SHARED" && bFrom !== bTo) ? "白金高輪" : to;
+  const branch = bFrom !== "SHARED" ? bFrom : (bTo !== "SHARED" ? bTo : "N");
+  const refList = branch === "I" ? FULL_I_NAMES : FULL_N_NAMES;
+  const idxFrom = refList.indexOf(from), idxWp = refList.indexOf(waypoint);
+  if(idxFrom === -1 || idxWp === -1) return true; // 判定できない場合は許可(安全側)
+  const neededSign = Math.sign(idxWp - idxFrom);
+  if(neededSign === 0) return true;
+  const st = train.stops;
+  if(idx+1 >= st.length) return true;
+  const idxNext = refList.indexOf(st[idx+1][0]);
+  if(idxNext === -1) return true; // 次の駅がこの系統に無い(分岐後など) → 許可
+  return Math.sign(idxNext - idxFrom) === neededSign;
+}
+
 /* 駅集合(路線バッジ判定用) */
 const SET_SH  = new Set(["新横浜","新綱島"]);
 const SET_COR = new Set(P_COR.map(x=>x[0]));
@@ -684,7 +713,7 @@ function chainToLegs(chain){
 }
 
 function findCandidates(from, to, nowMin){
-  const deps = (stationDeps.get(from) || []).filter(d=>d[0] >= nowMin);
+  const deps = (stationDeps.get(from) || []).filter(d=>d[0] >= nowMin && directionOK(d[1], d[2], from, to));
   const out = [];
   for(const [d, tr, idx] of deps){
     if(out.length >= 5) break;
@@ -733,7 +762,7 @@ function findCandidates(from, to, nowMin){
 }
 
 function findCandidatesByArrival(from, to, targetArrMin){
-  const deps = (stationDeps.get(from) || []).filter(d=>d[0] <= targetArrMin);
+  const deps = (stationDeps.get(from) || []).filter(d=>d[0] <= targetArrMin && directionOK(d[1], d[2], from, to));
   const out = [];
   for(const [d, tr, idx] of deps){
     const r = bestArrival(tr, idx, to, MAX_TRANSFERS, new Map());
