@@ -2,7 +2,7 @@
 // 目的: index.html・manifest・アイコンをキャッシュし、電波が悪い/圏外でも
 // 「起動して保存済み経路の最速電車をすぐ見る」というコア体験を止めない。
 
-const CACHE_NAME = "doretore-cache-v8"; // 中身を更新したらこの番号を上げる
+const CACHE_NAME = "doretore-cache-v9"; // 中身を更新したらこの番号を上げる
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -14,12 +14,21 @@ const APP_SHELL = [
   "./icon-maskable-512.png",
   "./icon-180.png"
 ];
+const OPTIONAL_SHELL = [
+  "./trains-input.json" // 無くても致命的ではないので個別にキャッシュを試みる
+];
 
 // インストール時: アプリの表示に必要な最小限のファイルを一括キャッシュ
 self.addEventListener("install", (event) => {
   self.skipWaiting(); // 新しいSWをすぐ有効化(更新の反映を待たせない)
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL))
+    caches.open(CACHE_NAME).then((cache) =>
+      cache.addAll(APP_SHELL).then(() =>
+        Promise.all(OPTIONAL_SHELL.map((url) =>
+          cache.add(url).catch(() => {}) // 存在しなくてもインストール全体は失敗させない
+        ))
+      )
+    )
   );
 });
 

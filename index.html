@@ -1205,23 +1205,24 @@ function setDark(on){
 buildPickers();
 $("home-content").innerHTML = '<div class="empty"><h3>時刻表を読み込み中…</h3><p>初回のみ少し時間がかかることがあります。</p></div>';
 
-fetch("./timetable-data.json")
-  .then(r => { if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
-  .then(data => {
-    if(data.schemaVersion !== 1 && data.schemaVersion !== 2){
-      console.warn("どれトレ: timetable-data.jsonのschemaVersionが想定外です", data.schemaVersion);
-    }
-    generateTimetable(data.stationSets, data.trains);
-  })
-  .catch(e => {
-    console.warn("どれトレ: timetable-data.jsonの読み込みに失敗したため、生成ダイヤのみで動作します", e);
-    generateTimetable(null, null);
-  })
-  .finally(() => {
-    renderHome();
-    renderRoutes();
-    /* 1分ごとに案内を自動更新(実時刻に追従) */
-    setInterval(()=>{ renderHome(); }, 60*1000);
+function loadJSON(url){
+  return fetch(url)
+    .then(r => { if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
+    .catch(e => { console.warn("どれトレ: "+url+" の読み込みに失敗しました", e); return null; });
+}
+
+Promise.all([
+  loadJSON("./timetable-data.json"),   // stationSets(目黒・白金高輪の実データ。ほぼ更新しない)
+  loadJSON("./trains-input.json")      // trains配列(インプットツールの書き出しをそのまま配置)
+]).then(([base, extra]) => {
+  const stationSets = base ? base.stationSets : null;
+  const trains = extra ? extra.trains : null;
+  generateTimetable(stationSets, trains);
+}).finally(() => {
+  renderHome();
+  renderRoutes();
+  /* 1分ごとに案内を自動更新(実時刻に追従) */
+  setInterval(()=>{ renderHome(); }, 60*1000);
   });
 
 /* ═════════ service worker registration ═════════ */
