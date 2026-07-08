@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>どれトレ 時刻表インプットツール</title>
+<style>
+  :root{
+    --tint:#DA0442; --bg:#F2F2F7; --card:#FFFFFF; --label:#1c1c1e; --label2:#6b6b70;
+    --sep:rgba(60,60,67,0.22); --fill:rgba(120,120,128,0.12); --green:#34C759; --red:#FF3B30;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN",sans-serif;
+    background:var(--bg); color:var(--label); padding:0 0 60px;
+  }
+  header{
+    background:linear-gradient(150deg,#B4003A,var(--tint)); color:#fff; padding:22px 20px 26px;
+  }
+  header h1{margin:0 0 4px; font-size:22px; font-weight:800;}
+  header p{margin:0; font-size:13px; opacity:0.9;}
+  .wrap{max-width:640px; margin:0 auto; padding:16px;}
+  .card{background:var(--card); border-radius:14px; padding:16px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,0.04);}
+  .card h2{font-size:15px; margin:0 0 12px; color:var(--label2); font-weight:600; text-transform:none;}
+  .seg{display:flex; background:var(--fill); border-radius:9px; padding:2px; gap:2px;}
+  .seg button{
+    flex:1; border:none; background:none; padding:8px 4px; font-size:14px; font-weight:600;
+    border-radius:7px; cursor:pointer; color:var(--label); font-family:inherit;
+  }
+  .seg button.on{background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.15); color:var(--tint);}
+  .field{margin-bottom:14px;}
+  .field label{display:block; font-size:13px; color:var(--label2); margin-bottom:5px; font-weight:600;}
+  select, input[type=text], input[type=time]{
+    width:100%; padding:10px 12px; border:1px solid var(--sep); border-radius:9px; font-size:15px;
+    background:#fff; color:var(--label); font-family:inherit;
+  }
+  select:focus, input:focus{outline:2px solid var(--tint); outline-offset:-1px;}
+  .btn{
+    display:inline-block; border:none; padding:12px 18px; border-radius:11px; font-size:15px;
+    font-weight:700; cursor:pointer; font-family:inherit;
+  }
+  .btn-primary{background:var(--tint); color:#fff; width:100%;}
+  .btn-primary:disabled{background:var(--fill); color:var(--label2); cursor:not-allowed;}
+  .btn-secondary{background:var(--fill); color:var(--label);}
+  .btn-danger{background:none; color:var(--red); padding:6px 10px; font-size:13px;}
+  .btn-small{padding:8px 12px; font-size:13px;}
+  .row-stations{display:flex; gap:10px;}
+  .row-stations .field{flex:1;}
+  .stop-row{
+    display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--sep);
+  }
+  .stop-row:last-child{border-bottom:none;}
+  .stop-name{flex:0 0 96px; font-size:14px; font-weight:700;}
+  .stop-times{flex:1; display:flex; gap:8px;}
+  .stop-times .tf{flex:1;}
+  .stop-times .tf label{font-size:10px; color:var(--label2); display:block; margin-bottom:2px;}
+  .stop-times input{padding:7px 8px; font-size:14px;}
+  .hint{font-size:12px; color:var(--label2); line-height:1.5; margin:6px 0 0;}
+  .train-item{
+    display:flex; justify-content:space-between; align-items:center; padding:12px 0;
+    border-bottom:1px solid var(--sep);
+  }
+  .train-item:last-child{border-bottom:none;}
+  .train-item .meta{font-size:13px;}
+  .train-item .meta b{font-size:15px;}
+  .badge{
+    display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:10px;
+    background:var(--fill); color:var(--label2); margin-left:6px;
+  }
+  .badge.exp{background:rgba(218,4,66,0.12); color:var(--tint);}
+  .empty-msg{text-align:center; color:var(--label2); font-size:14px; padding:20px 0;}
+  .toolbar{display:flex; gap:10px; margin-top:4px;}
+  .toolbar .btn{flex:1;}
+  textarea{
+    width:100%; min-height:90px; font-family:ui-monospace,monospace; font-size:12px;
+    border:1px solid var(--sep); border-radius:9px; padding:10px;
+  }
+  .toast{
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:#1c1c1e; color:#fff; padding:10px 18px; border-radius:10px; font-size:14px;
+    opacity:0; transition:all 0.25s; pointer-events:none; z-index:100;
+  }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+
+  /* ─── ダイヤグラム表 ─── */
+  .diagram-wrap{overflow-x:auto; border:1px solid var(--sep); border-radius:8px;}
+  .diagram-table{border-collapse:collapse; font-size:12px; white-space:nowrap;}
+  .diagram-table th, .diagram-table td{
+    border:1px solid var(--sep); padding:5px 8px; text-align:center; background:#fff;
+  }
+  .diagram-table th.rowhead, .diagram-table td.rowhead{
+    position:sticky; left:0; z-index:2; background:#fafafa; text-align:left; font-weight:700;
+    box-shadow:1px 0 0 var(--sep);
+  }
+  .diagram-table thead th{position:sticky; top:0; z-index:1; background:#fafafa;}
+  .diagram-table thead th.rowhead{z-index:3;}
+  .diagram-table .meta-label{color:var(--label2); font-size:10px;}
+  .diagram-table .exp-col{color:var(--tint); font-weight:700;}
+  .diagram-table .loc-col{color:var(--label);}
+  .diagram-table .empty-cell{color:var(--sep);}
+  .diagram-table .train-col-head{min-width:64px;}
+  .diagram-legend{font-size:12px; color:var(--label2); margin-top:8px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>どれトレ 時刻表インプットツール</h1>
+  <p>列車1本ごとに、各駅の着時刻・発時刻を入力してJSONを作成します</p>
+</header>
+
+<div class="wrap">
+
+  <div class="card">
+    <h2>ダイヤ区分</h2>
+    <div class="seg" id="segCalendar">
+      <button class="on" data-v="weekday">平日ダイヤ</button>
+      <button data-v="saturday_holiday">休日ダイヤ</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>系統</h2>
+    <div class="seg" id="segBranch"><!-- network.jsのbranches定義から自動生成 --></div>
+    <p class="hint">路線・駅の追加はnetwork.jsを編集すると、ここにも自動反映されます。</p>
+  </div>
+
+  <div class="card">
+    <h2>方向</h2>
+    <div class="seg" id="segDirection">
+      <button class="on" data-v="nb">北行(相鉄・新横浜 → 都心方面)</button>
+      <button data-v="sb">南行(都心方面 → 新横浜・相鉄)</button>
+    </div>
+    <p class="hint">実際の列車の進行方向を選んでください。始発駅・終着駅の並びと矛盾する場合はエラーになります。</p>
+  </div>
+
+  <div class="card">
+    <h2>列車の始発駅・終着駅・種別</h2>
+    <div class="row-stations">
+      <div class="field">
+        <label>始発駅</label>
+        <select id="fromStation"></select>
+      </div>
+      <div class="field">
+        <label>終着駅</label>
+        <select id="toStation"></select>
+      </div>
+    </div>
+    <div class="field">
+      <label>種別</label>
+      <div class="seg" id="segType">
+        <button class="on" data-v="loc">各停</button>
+        <button data-v="exp">急行</button>
+      </div>
+    </div>
+    <button class="btn btn-secondary btn-small" onclick="buildStopRows()">この区間の駅を表示</button>
+    <p class="hint" id="pathHint"></p>
+  </div>
+
+  <div class="card" id="editBanner" style="display:none;background:rgba(218,4,66,0.08);align-items:center;justify-content:space-between;">
+    <span id="editBannerText" style="font-size:14px;font-weight:600;color:var(--tint);"></span>
+    <button class="btn btn-secondary btn-small" onclick="cancelEdit()">編集をやめて新規追加に戻す</button>
+  </div>
+
+  <div class="card" id="stopsCard" style="display:none;">
+    <h2>各駅の着時刻・発時刻</h2>
+    <div id="stopsList"></div>
+    <p class="hint">始発駅は発のみ、終着駅は着のみで構いません。通過待ちがなく着=発とみなせる駅は、どちらか片方だけの入力でも構いません。時刻は「5:12」「0512」「512」のいずれの形式でも構いません(コロンなしでもOK)。</p>
+    <div style="margin-top:14px;">
+      <button class="btn btn-primary" id="saveTrainBtn" onclick="saveTrain()">この列車を保存</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>登録済みの列車(<span id="trainCount">0</span>本)</h2>
+    <div id="trainList"><div class="empty-msg">まだ列車が登録されていません</div></div>
+    <div class="toolbar">
+      <button class="btn btn-secondary" onclick="downloadJSON()">JSONをダウンロード</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('importFile').click()">JSONを読み込む</button>
+      <button class="btn btn-danger" style="border:1px solid var(--red);" onclick="deleteAllTrains()">すべて削除</button>
+    </div>
+    <input type="file" id="importFile" accept="application/json" style="display:none;" onchange="importJSON(event)">
+  </div>
+
+  <div class="card">
+    <h2>ダイヤグラム表示</h2>
+    <div class="field">
+      <label>表示対象</label>
+      <div class="seg" id="segDiagramFilter"><!-- network.jsのbranches定義から自動生成 --></div>
+    </div>
+    <div id="diagramContainer"><p class="hint">列車を登録すると、ここに列車ごとの時刻表が表示されます。</p></div>
+    <p class="diagram-legend">縦=駅、横=列車。セルは「着/発」(異なる場合)または単一の時刻。空欄はその列車が停車データを持たない駅です。<span class="exp-col">赤字</span>は急行。</p>
+  </div>
+
+  <div class="card">
+    <h2>現在のJSON(プレビュー)</h2>
+    <textarea id="jsonPreview" readonly></textarea>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="network.js"></script>
+<script>
+"use strict";
+/* network.js が同じフォルダに無いと動かない。読み込めていれば window.NETWORK が存在する。
+   欠如時はエラー画面を出す(本体コードは NETWORK 参照で自然に停止する)。 */
+if(!window.NETWORK){
+  document.addEventListener("DOMContentLoaded", function(){
+    document.body.innerHTML =
+      '<div style="max-width:560px;margin:60px auto;padding:24px;background:#fff;border-radius:14px;font-family:sans-serif;line-height:1.7;">' +
+      '<h2 style="color:#DA0442;margin:0 0 12px;">network.js が見つかりません</h2>' +
+      '<p>このツールは路線図データ(<b>network.js</b>)を同じフォルダから読み込みます。</p>' +
+      '<p>network.js を、この timetable-input-tool.html と<b>同じフォルダ</b>に置いてから開き直してください。</p>' +
+      '</div>';
+  });
+}
+/* ═════════ ネットワーク定義: network.js(共有ファイル)から取得 ═════════
+   路線・駅の追加・変更は network.js だけを編集する。 */
+const P_SH  = NETWORK.segments.SH;
+const P_COR = NETWORK.segments.COR;
+const P_MG  = NETWORK.segments.MG;
+const P_SHD = NETWORK.segments.SHD;
+const P_N   = NETWORK.segments.N;
+const P_I   = NETWORK.segments.I;
+
+/* 時刻入力の対象駅(準備中prepの駅は始発・終着ラベルとしてのみ使用) */
+const KNOWN_SET = new Set(netStationsOfGroups(false));
+/* ダイヤグラム表の行順(準備中も含む全駅の正規順序) */
+const ROW_ORDER = netStationsOfGroups(true);
+
+function fmtMin(m){
+  m = ((m % 1440) + 1440) % 1440;
+  return Math.floor(m/60) + ":" + String(m%60).padStart(2,"0");
+}
+
+/* ═════════ stationSets形式(schemaVersion 1)からの変換 ═════════
+   どれトレ本体のアダプタ(meguro_down / shirokane_up)と同じ経路・オフセット計算で、
+   駅ごとの実データを列車ごとの着発データに展開する。この変換で得られる時刻は
+   「各駅停車・各停想定で逆算した推定値」であり、真の着発時刻ではない点に注意。
+   このツールで列車を選んで編集すれば、実際の着発時刻に上書きしていける。 */
+const MEG_OFFSET = joinPaths(P_SH, P_COR, P_MG).slice(-1)[0][1]; // 新横浜→目黒(各停・分)
+function meguroBranchPath(code){
+  if(code==="高") return truncTo(P_I, "高島平");
+  if(code==="神") return truncTo(P_N, "王子神谷");
+  if(code==="")   return P_I;
+  return P_N;
+}
+function meguroBranch(code){ return (code==="高"||code==="") ? "I" : "N"; }
+const SB_FULL_PATH = joinPaths(reversePath(P_SHD), reversePath(P_MG), reversePath(P_COR), reversePath(P_SH));
+function shirokaneBranchPath(code){
+  if(code==="武") return truncTo(SB_FULL_PATH, "武蔵小杉");
+  if(code==="奥") return truncTo(SB_FULL_PATH, "奥沢");
+  if(code==="")   return truncTo(SB_FULL_PATH, "日吉");
+  return SB_FULL_PATH;
+}
+function pathToStops(path, dep0){
+  return path.map(([name,c],i)=>{
+    const t = fmtMin(dep0 + c);
+    const rec = { station: name };
+    if(i > 0) rec.arr = t;
+    if(i < path.length-1) rec.dep = t;
+    return rec;
+  });
+}
+function convertStationSetsToTrains(stationSets){
+  const out = [];
+  if(stationSets.meguro_down){
+    const set = stationSets.meguro_down;
+    (set.entries||[]).forEach(([h,m,code])=>{
+      const dep0 = h*60+m - MEG_OFFSET;
+      out.push({
+        branch: meguroBranch(code), calendar: set.calendar || "weekday", type: "loc", dir: "nb",
+        origin: "新横浜", dest: (set.destLabel && set.destLabel[code]) || code || "(無印)",
+        stops: pathToStops(joinPaths(P_SH,P_COR,P_MG,P_SHD, meguroBranchPath(code)), dep0)
+      });
+    });
+  }
+  if(stationSets.shirokane_up){
+    const set = stationSets.shirokane_up;
+    (set.entries||[]).forEach(([h,m,code,isExp])=>{
+      const dep0 = h*60+m;
+      out.push({
+        branch: "N", calendar: set.calendar || "weekday", type: isExp ? "exp" : "loc", dir: "sb",
+        origin: "白金高輪", dest: (set.destLabel && set.destLabel[code]) || code || "(無印)",
+        stops: pathToStops(shirokaneBranchPath(code), dep0)
+      });
+    });
+  }
+  return out;
+}
+
+/* ═════════ 状態 ═════════ */
+let state = {
+  calendar: "weekday",
+  branch: "I",
+  direction: "nb",
+  type: "loc",
+  trains: [],
+  editingIndex: null
+};
+const STORAGE_KEY = "doretore.inputTool.v1";
+
+function load(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const p = JSON.parse(raw);
+      if(p && Array.isArray(p.trains)) state.trains = p.trains;
+    }
+  }catch(e){ console.warn("読み込み失敗", e); }
+}
+function persist(){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify({trains: state.trains})); }
+  catch(e){ console.warn("保存失敗", e); }
+}
+
+/* ═════════ UI: セグメントコントロール ═════════ */
+function wireSeg(id, onChange){
+  const el = document.getElementById(id);
+  el.querySelectorAll("button").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      el.querySelectorAll("button").forEach(b=>b.classList.remove("on"));
+      btn.classList.add("on");
+      onChange(btn.dataset.v);
+    });
+  });
+}
+function setSeg(id, value){
+  const el = document.getElementById(id);
+  el.querySelectorAll("button").forEach(b=>b.classList.toggle("on", b.dataset.v === value));
+  if(id === "segCalendar") state.calendar = value;
+  if(id === "segBranch") state.branch = value;
+  if(id === "segDirection") state.direction = value;
+  if(id === "segType") state.type = value;
+}
+/* 系統ボタン・ダイヤグラムフィルタを network.js の branches 定義から動的生成 */
+(function initBranchSegs(){
+  const keys = Object.keys(NETWORK.branches);
+  document.getElementById("segBranch").innerHTML =
+    keys.map((k,i)=>'<button'+(i===0?' class="on"':'')+' data-v="'+k+'">'+NETWORK.branches[k].label+'</button>').join("");
+  document.getElementById("segDiagramFilter").innerHTML =
+    '<button class="on" data-v="all">すべて</button>' +
+    keys.map(k=>'<button data-v="'+k+'">'+NETWORK.branches[k].label+'</button>').join("");
+})();
+wireSeg("segCalendar", v => state.calendar = v);
+wireSeg("segBranch", v => { state.branch = v; populateStationSelects(); });
+wireSeg("segDirection", v => state.direction = v);
+wireSeg("segType", v => state.type = v);
+
+/* ═════════ 駅セレクトの構築 ═════════ */
+function populateStationSelects(){
+  const seen = new Set();
+  const groupsHtml = NETWORK.pickerGroups.map(gr=>{
+    const opts = [];
+    gr.segs.forEach(sk=>{
+      NETWORK.segments[sk].forEach(([n])=>{
+        if(seen.has(n)) return;
+        seen.add(n);
+        opts.push('<option value="'+n+'">'+n+'</option>');
+      });
+    });
+    if(opts.length === 0) return "";
+    return '<optgroup label="'+gr.label+'">' + opts.join("") + '</optgroup>';
+  }).join("");
+  ["fromStation","toStation"].forEach(id=>{
+    document.getElementById(id).innerHTML = groupsHtml;
+  });
+  document.getElementById("fromStation").selectedIndex = 0;
+  document.getElementById("toStation").selectedIndex = document.getElementById("toStation").options.length - 1;
+}
+populateStationSelects();
+
+/* ═════════ 区間の駅を組み立てる ═════════ */
+let currentStops = []; // [{name, isTrueOrigin, isTrueDest}]
+function buildStopRows(){
+  const from = document.getElementById("fromStation").value;
+  const to = document.getElementById("toStation").value;
+  if(from === to){
+    document.getElementById("pathHint").textContent = "始発駅と終着駅が同じです。";
+    document.getElementById("stopsCard").style.display = "none";
+    return;
+  }
+  const path = netBfsPath(from, to);
+  if(!path){
+    document.getElementById("pathHint").textContent = "この2駅は路線図上で接続されていません(network.jsの定義を確認してください)。";
+    document.getElementById("stopsCard").style.display = "none";
+    return;
+  }
+  /* 方向の検証: 選んだ系統の東側終端駅(eastAnchor)への駅数が減る=北行 */
+  const anchor = NETWORK.branches[state.branch].eastAnchor;
+  const dist = netBfsDist(anchor);
+  const dF = dist.get(from), dT = dist.get(to);
+  const actualDir = (dF != null && dT != null && dT < dF) ? "nb" : "sb";
+  if(actualDir !== state.direction){
+    const actualLabel = actualDir === "nb" ? "北行(新横浜 → 都心方面)" : "南行(都心方面 → 新横浜)";
+    document.getElementById("pathHint").textContent =
+      "選んだ方向と、始発駅→終着駅の並びが矛盾しています。" + from + "→" + to + " は実際には" + actualLabel + "です。「方向」を選び直すか、始発駅・終着駅を入れ替えてください。";
+    document.getElementById("stopsCard").style.display = "none";
+    return;
+  }
+  const known = path.filter(s => KNOWN_SET.has(s));
+  if(known.length === 0){
+    document.getElementById("pathHint").textContent = "この区間は時刻入力の対象範囲(準備中を除く路線)を通らないため、時刻入力は不要です。始発駅・終着駅の情報のみ保存されます。";
+    currentStops = [];
+    renderStopRows();
+    document.getElementById("stopsCard").style.display = "block";
+    return;
+  }
+  currentStops = known.map(name => ({
+    name,
+    isTrueOrigin: name === from && name === known[0],
+    isTrueDest:   name === to   && name === known[known.length-1]
+  }));
+  document.getElementById("pathHint").textContent =
+    "対象区間: " + known[0] + " 〜 " + known[known.length-1] + "(" + known.length + "駅)";
+  renderStopRows();
+  document.getElementById("stopsCard").style.display = "block";
+}
+function renderStopRows(){
+  const el = document.getElementById("stopsList");
+  if(currentStops.length === 0){
+    el.innerHTML = '<p class="hint">この列車には対象区間内の駅がありません。</p>';
+    return;
+  }
+  el.innerHTML = currentStops.map((s,i)=>{
+    const showArr = !s.isTrueOrigin;
+    const showDep = !s.isTrueDest;
+    return '<div class="stop-row">' +
+      '<div class="stop-name">'+s.name+'</div>' +
+      '<div class="stop-times">' +
+        (showArr ? '<div class="tf"><label>着</label><input type="text" placeholder="512 または 5:12" id="arr'+i+'"></div>' : '<div class="tf"></div>') +
+        (showDep ? '<div class="tf"><label>発</label><input type="text" placeholder="512 または 5:12" id="dep'+i+'"></div>' : '<div class="tf"></div>') +
+      '</div>' +
+    '</div>';
+  }).join("");
+}
+
+/* ═════════ 保存・一覧 ═════════ */
+function normTime(v){
+  v = (v||"").trim();
+  if(!v) return null;
+  let m = v.match(/^(\d{1,2}):(\d{2})$/);
+  if(m) return String(parseInt(m[1],10)) + ":" + m[2];
+  m = v.match(/^(\d{1,2})(\d{2})$/); // 「0459」「459」のような区切りなし入力
+  if(m) return String(parseInt(m[1],10)) + ":" + m[2];
+  return null;
+}
+function saveTrain(){
+  const from = document.getElementById("fromStation").value;
+  const to = document.getElementById("toStation").value;
+  const stops = currentStops.map((s,i)=>{
+    const arrEl = document.getElementById("arr"+i);
+    const depEl = document.getElementById("dep"+i);
+    const arr = arrEl ? normTime(arrEl.value) : null;
+    const dep = depEl ? normTime(depEl.value) : null;
+    const rec = { station: s.name };
+    if(arr) rec.arr = arr;
+    if(dep) rec.dep = dep;
+    return rec;
+  }).filter(r => r.arr || r.dep);
+
+  if(currentStops.length > 0 && stops.length === 0){
+    showToast("時刻が1件も入力されていません");
+    return;
+  }
+
+  const record = {
+    branch: state.branch,
+    calendar: state.calendar,
+    type: state.type,
+    dir: state.direction,
+    origin: from,
+    dest: to,
+    stops
+  };
+
+  if(state.editingIndex != null){
+    state.trains[state.editingIndex] = record;
+    showToast("列車を更新しました(" + (state.editingIndex+1) + "本目)");
+    cancelEdit();
+  }else{
+    state.trains.push(record);
+    showToast("列車を保存しました(" + state.trains.length + "本目)");
+  }
+  persist();
+  renderTrainList();
+  document.getElementById("stopsCard").style.display = "none";
+}
+function editTrain(i){
+  const t = state.trains[i];
+  state.editingIndex = i;
+  setSeg("segCalendar", t.calendar);
+  setSeg("segBranch", t.branch);
+  setSeg("segDirection", t.dir || "nb");
+  setSeg("segType", t.type);
+  populateStationSelects();
+  document.getElementById("fromStation").value = t.origin;
+  document.getElementById("toStation").value = t.dest;
+  buildStopRows();
+  t.stops.forEach(s=>{
+    const idx = currentStops.findIndex(cs=>cs.name === s.station);
+    if(idx === -1) return;
+    if(s.arr){ const el = document.getElementById("arr"+idx); if(el) el.value = s.arr; }
+    if(s.dep){ const el = document.getElementById("dep"+idx); if(el) el.value = s.dep; }
+  });
+  document.getElementById("saveTrainBtn").textContent = "この列車を更新";
+  document.getElementById("editBanner").style.display = "flex";
+  document.getElementById("editBannerText").textContent = "編集中: " + t.origin + " → " + t.dest;
+  const stopsCardEl = document.getElementById("stopsCard");
+  if(stopsCardEl.scrollIntoView) stopsCardEl.scrollIntoView({behavior:"smooth", block:"start"});
+}
+function cancelEdit(){
+  state.editingIndex = null;
+  document.getElementById("saveTrainBtn").textContent = "この列車を保存";
+  document.getElementById("editBanner").style.display = "none";
+}
+function renderTrainList(){
+  document.getElementById("trainCount").textContent = state.trains.length;
+  const el = document.getElementById("trainList");
+  if(state.trains.length === 0){
+    el.innerHTML = '<div class="empty-msg">まだ列車が登録されていません</div>';
+  }else{
+    el.innerHTML = state.trains.map((t,i)=>{
+      const first = t.stops[0], last = t.stops[t.stops.length-1];
+      const range = first && last ? (first.dep||first.arr||"?") + " 〜 " + (last.arr||last.dep||"?") : "(対象区間なし)";
+      return '<div class="train-item">' +
+        '<div class="meta"><b>'+t.origin+' → '+t.dest+'</b><span class="badge'+(t.type==="exp"?" exp":"")+'">'+(t.type==="exp"?"急行":"各停")+'</span><span class="badge">'+((t.dir||"nb")==="nb"?"北行":"南行")+'</span><span class="badge">'+(t.calendar==="weekday"?"平日":"休日")+'</span><br>'+range+' ('+t.stops.length+'駅分)</div>' +
+        '<div style="display:flex;gap:4px;">' +
+        '<button class="btn btn-secondary btn-small" onclick="editTrain('+i+')">編集</button>' +
+        '<button class="btn btn-danger" onclick="deleteTrain('+i+')">削除</button>' +
+        '</div>' +
+      '</div>';
+    }).join("");
+  }
+  updatePreview();
+  renderDiagram();
+}
+function deleteTrain(i){
+  state.trains.splice(i,1);
+  if(state.editingIndex === i) cancelEdit();
+  else if(state.editingIndex != null && state.editingIndex > i) state.editingIndex--;
+  persist();
+  renderTrainList();
+}
+function deleteAllTrains(){
+  if(state.trains.length === 0){ showToast("削除する列車がありません"); return; }
+  const ok = confirm("登録済みの列車を"+state.trains.length+"本すべて削除します。この操作は取り消せません。よろしいですか?");
+  if(!ok) return;
+  state.trains = [];
+  cancelEdit();
+  persist();
+  renderTrainList();
+  showToast("すべての列車を削除しました");
+}
+function updatePreview(){
+  document.getElementById("jsonPreview").value = JSON.stringify(
+    { schemaVersion: 2, trains: state.trains }, null, 2
+  );
+}
+
+/* ═════════ ダイヤグラム表示 ═════════ */
+let diagramFilter = "all";
+wireSeg("segDiagramFilter", v => { diagramFilter = v; renderDiagram(); });
+
+function diagramTimeCell(s, cls){
+  const c = cls ? ' class="'+cls+'"' : '';
+  if(!s) return '<td class="empty-cell">・</td>';
+  if(s.arr && s.dep && s.arr !== s.dep) return '<td'+c+'>'+s.arr+'<br>'+s.dep+'</td>';
+  return '<td'+c+'>'+(s.dep || s.arr)+'</td>';
+}
+function renderDiagram(){
+  const container = document.getElementById("diagramContainer");
+  const trains = state.trains.filter(t => diagramFilter === "all" || t.branch === diagramFilter);
+  if(trains.length === 0){
+    container.innerHTML = '<p class="hint">'+(state.trains.length===0 ? "列車を登録すると、ここに列車ごとの時刻表が表示されます。" : "この系統に該当する列車がありません。")+'</p>';
+    return;
+  }
+
+  // 行(駅)の並び: 共用区間 → 三田線側 → 南北線側+埼玉高速 → (念のため相鉄側)
+  const used = new Set();
+  trains.forEach(t => t.stops.forEach(s => used.add(s.station)));
+  const rows = ROW_ORDER.filter(s => used.has(s));
+
+  // 列(列車)の並び: 先頭停車時刻の早い順
+  const sortedTrains = trains.map((t,i)=>({t, i, key: (t.stops[0] && (t.stops[0].dep||t.stops[0].arr)) || "99:99"}))
+    .sort((a,b)=> a.key.localeCompare(b.key));
+
+  let html = '<div class="diagram-wrap"><table class="diagram-table"><thead>';
+  html += '<tr><th class="rowhead">列車番号</th>' + sortedTrains.map(x=>'<th class="train-col-head">T'+(x.i+1)+'</th>').join("") + '</tr>';
+  html += '<tr><th class="rowhead">種別</th>' + sortedTrains.map(x=>'<th class="'+(x.t.type==="exp"?"exp-col":"loc-col")+'">'+(x.t.type==="exp"?"急行":"各停")+'</th>').join("") + '</tr>';
+  html += '<tr><th class="rowhead">方向</th>' + sortedTrains.map(x=>'<th class="meta-label">'+((x.t.dir||"nb")==="nb"?"北行":"南行")+'</th>').join("") + '</tr>';
+  html += '<tr><th class="rowhead">運転日</th>' + sortedTrains.map(x=>'<th class="meta-label">'+(x.t.calendar==="weekday"?"平日":"休日")+'</th>').join("") + '</tr>';
+  html += '<tr><th class="rowhead">始発</th>' + sortedTrains.map(x=>'<th class="meta-label">'+x.t.origin+'</th>').join("") + '</tr>';
+  html += '</thead><tbody>';
+  rows.forEach(station=>{
+    html += '<tr><td class="rowhead">'+station+'</td>';
+    sortedTrains.forEach(x=>{
+      const s = x.t.stops.find(s=>s.station===station);
+      html += diagramTimeCell(s, x.t.type==="exp" ? "exp-col" : "");
+    });
+    html += '</tr>';
+  });
+  html += '<tr><td class="rowhead">終着</td>' + sortedTrains.map(x=>'<td class="meta-label">'+x.t.dest+'</td>').join("") + '</tr>';
+  html += '</tbody></table></div>';
+  container.innerHTML = html;
+}
+function downloadJSON(){
+  const blob = new Blob([JSON.stringify({schemaVersion:2, trains: state.trains}, null, 2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "trains-input.json";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function importJSON(ev){
+  const file = ev.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const data = JSON.parse(reader.result);
+      let toAdd;
+      if(Array.isArray(data.trains)){
+        toAdd = data.trains;
+      }else if(data.stationSets){
+        toAdd = convertStationSetsToTrains(data.stationSets);
+        if(toAdd.length === 0) throw new Error("stationSets内にentriesが見つかりません");
+      }else{
+        throw new Error("対応形式が見つかりません(trains配列 または stationSets が必要です)");
+      }
+      state.trains = state.trains.concat(toAdd);
+      persist();
+      renderTrainList();
+      showToast(toAdd.length + "本を追加で読み込みました");
+    }catch(e){
+      showToast("読み込み失敗: " + e.message);
+    }
+  };
+  reader.readAsText(file);
+  ev.target.value = "";
+}
+function showToast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(showToast._h);
+  showToast._h = setTimeout(()=>t.classList.remove("show"), 2200);
+}
+
+/* ═════════ init ═════════ */
+load();
+renderTrainList();
+</script>
+</body>
+</html>
