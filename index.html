@@ -480,14 +480,20 @@ const LINES = {
 
 /* 路線バッジ判定(共用区間は列車の系統で解決) */
 function stationLine(st, train){
+  let fallback = null;
   for(const segKey of NETWORK.segmentPrecedence){
     const seg = NETWORK.segments[segKey];
     if(!seg.some(x=>x[0]===st)) continue;
     const rule = NETWORK.segmentLine[segKey];
-    if(typeof rule === "string") return rule;
-    return (rule.shared && rule.shared[train.branch]) || rule.default;
+    if(typeof rule === "string"){
+      if(fallback === null) fallback = rule; // プレーンな規則は保留し、系統対応の規則を優先探索
+      continue;
+    }
+    const branchLine = rule.shared && rule.shared[train.branch];
+    if(branchLine) return branchLine; // 列車の系統(branch)に一致する規則があれば即採用
+    if(fallback === null) fallback = rule.default;
   }
-  return "MG";
+  return fallback || "MG";
 }
 
 /* 対面乗り換え可能駅(乗換0分)・急行通過駅・経路登録の駅リスト */
@@ -614,6 +620,32 @@ function stopSummary(leg){
   if(mid.length<=4) return mid.join("・");
   return mid.slice(0,3).join("・") + " ほか" + (mid.length-3) + "駅";
 }
+function legLineCodes(leg){
+  // このleg(乗換までの連続乗車)が乗り入れる路線を、乗車駅から列車の最終停車駅まで
+  // たどって重複除去する。最大2つ(現在の路線・次に乗り入れる路線)を返す。
+  const st = leg.t.stops;
+  const codes = [];
+  for(let i = leg.bi; i < st.length; i++){
+    const code = stationLine(st[i][0], leg.t);
+    if(codes[codes.length-1] !== code) codes.push(code);
+    if(codes.length >= 2) return codes;
+  }
+  /* 記録された停車データがそこで尽きた場合、行先ラベル(dest)まで路線図上で
+     たどれるなら、その先の路線も2つ目のバッジ候補として補う。
+     (例: 記録は飯田橋までだが行先は浦和美園 → 先の埼玉高速区間もバッジに反映) */
+  const lastStop = st[st.length-1][0];
+  if(leg.t.dest && leg.t.dest !== lastStop){
+    const path = netBfsPath(lastStop, leg.t.dest);
+    if(path){
+      for(const name of path){
+        const code = stationLine(name, leg.t);
+        if(codes[codes.length-1] !== code) codes.push(code);
+        if(codes.length >= 2) break;
+      }
+    }
+  }
+  return codes;
+}
 function chainToLegs(chain){
   const legs = [];
   chain.forEach((leg, i)=>{
@@ -621,7 +653,7 @@ function chainToLegs(chain){
     if(i>0) legs.push({kind:"walk", note:"同じホームで対面乗り換え(0分)"});
     legs.push({
       kind:"ride",
-      line: stationLine(bo[0], leg.t),
+      lines: legLineCodes(leg),
       type: typeLabel(leg.t)+" "+leg.t.dest+"行",
       desc: descFor(leg.t),
       from: bo[0], dep: fmt(bo[2]),
@@ -668,17 +700,18 @@ function findCandidates(from, to, nowMin){
     }else{
       note = "最速より +"+(c.arrMin - minArr)+"分";
     }
+    const legs = chainToLegs(c.chain);
     return {
       dep: fmt(c.depMin), arr: fmt(c.arrMin),
       depMin: c.depMin, arrMin: c.arrMin,
       dur: c.arrMin - c.depMin,
       tr: c.chain.length - 1,
       wait: c.depMin - nowMin,
-      line: stationLine(from, c.train),
+      lines: legs[0].lines,
       type: typeLabel(c.train),
       dest: c.train.dest + "行",
       fastest, note,
-      legs: chainToLegs(c.chain)
+      legs
     };
   });
 }
@@ -703,17 +736,18 @@ function findCandidatesByArrival(from, to, targetArrMin){
     const note = fastest
       ? "指定時刻に間に合う中で最も遅く出発できます"
       : (maxArr - c.arrMin) + "分早く到着(念のため早めに動きたい場合)";
+    const legs = chainToLegs(c.chain);
     return {
       dep: fmt(c.depMin), arr: fmt(c.arrMin),
       depMin: c.depMin, arrMin: c.arrMin,
       dur: c.arrMin - c.depMin,
       tr: c.chain.length - 1,
       wait: c.depMin - nowMinutes(),
-      line: stationLine(from, c.train),
+      lines: legs[0].lines,
       type: typeLabel(c.train),
       dest: c.train.dest + "行",
       fastest, note,
-      legs: chainToLegs(c.chain)
+      legs
     };
   });
 }
@@ -759,6 +793,15 @@ const $ = id => document.getElementById(id);
 function badge(line, size){
   const l = LINES[line];
   return '<div class="badge" style="background:'+l.c+';'+(size?'width:'+size+'px;height:'+size+'px;':'')+'">'+l.s+'</div>';
+}
+function badges(lines, size){
+  if(!lines || lines.length===0) return "";
+  if(lines.length===1) return badge(lines[0], size);
+  return '<div style="display:flex;align-items:center;gap:2px;">'+
+    badge(lines[0], size)+
+    '<span style="font-size:11px;color:var(--label3);">→</span>'+
+    badge(lines[1], size)+
+  '</div>';
 }
 function flashCell(el){}
 function nowMinutes(){
@@ -821,7 +864,7 @@ function renderHome(){
       '<div class="pill">最速</div>'+
       '<div class="eyebrow">'+r.from+' → '+r.to+'　次に乗るべき電車'+(tomorrow?'(明朝)':'')+'</div>'+
       '<div class="dep">'+best.dep+'<small> 発'+(tomorrow?'':'(あと'+best.wait+'分)')+'</small></div>'+
-      '<div class="train">'+badge(best.line,22)+best.type+' '+best.dest+'</div>'+
+      '<div class="train">'+badges(best.lines,22)+best.type+' '+best.dest+'</div>'+
       '<div class="meta"><span>到着 '+best.arr+'</span><span>所要 '+best.dur+'分</span><span>乗り換え '+best.tr+'回</span></div>'+
       '<div class="save">'+best.note+'</div>'+
     '</div>';
@@ -833,7 +876,7 @@ function renderHome(){
     html +=
       '<div class="cell" onclick="openDetail('+i+')">'+
         '<div class="cand-time">'+cd.dep+'</div>'+
-        badge(cd.line)+
+        badges(cd.lines)+
         '<div class="main"><div class="title" style="font-size:15px;font-weight:600;">'+cd.type+' '+cd.dest+'</div>'+
         '<div class="sub">乗り換え'+cd.tr+'回 · 所要'+cd.dur+'分</div></div>'+
         '<div class="arr-tag"><div class="big">'+cd.arr+'着</div>'+diff+'</div>'+
@@ -866,11 +909,11 @@ function renderRoutes(){
     const cands = findCandidates(r.from, r.to, now);
     const best = cands.find(x=>x.fastest);
     const sub = best ? ("最速 "+best.dep+"発 · "+best.arr+"着("+best.dur+"分)") : "現在は運行時間外";
-    const line = best ? best.line : "MG";
+    const lines = best ? best.lines : ["MG"];
     html +=
       '<div class="cell" onclick="goHomeWith('+i+')">'+
         '<button class="minus-btn" onclick="event.stopPropagation();askDelete('+i+')" aria-label="削除">−</button>'+
-        badge(line)+
+        badges(lines)+
         '<div class="main"><div class="title">'+r.from+' → '+r.to+'</div>'+
         '<div class="sub">'+sub+'</div></div>'+
         '<div class="chevron">›</div>'+
@@ -932,13 +975,14 @@ function openDetail(ci){
   html += '<div class="section-header" style="padding-left:4px;">乗り換え案内</div><div class="timeline">';
   cd.legs.forEach((leg)=>{
     if(leg.kind === "ride"){
-      const l = LINES[leg.line];
+      const l = LINES[leg.lines[0]];
+      const lineNames = leg.lines.map(code=>LINES[code].name).join("→");
       html +=
         '<div class="tl-row"><div class="tl-line"><div class="tl-dot" style="border-color:'+l.c+';"></div></div>'+
         '<div style="flex:1;"><span class="tl-station">'+leg.from+'</span> <span class="tl-time">'+leg.dep+'発</span></div></div>'+
         '<div class="tl-row"><div class="tl-line"><div class="tl-bar" style="background:'+l.c+';"></div></div>'+
         '<div class="tl-train" style="flex:1;">'+
-          '<div class="name">'+badge(leg.line,20)+l.name+' '+leg.type+'</div>'+
+          '<div class="name">'+badges(leg.lines,20)+lineNames+' '+leg.type+'</div>'+
           '<div class="note">'+leg.desc+'</div>'+
           '<div class="note">停車駅: '+leg.stops+'</div>'+
         '</div></div>'+
