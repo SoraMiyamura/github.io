@@ -541,8 +541,13 @@ function makeTrainFromRecord(rec){
     const d0 = dist.get(stops[0][0]), d1 = dist.get(stops[stops.length-1][0]);
     dir = (d0 != null && d1 != null && d1 > d0) ? "sb" : "nb";
   }
+  /* 種別は区間ごとに保持(相鉄=各停/特急、東急=各停/急行)。
+     旧schema(type のみ)は両区間に適用して後方互換を保つ。 */
+  const legacy = rec.type;
+  const kindSo = rec.typeSo != null ? rec.typeSo : (legacy || "loc");
+  const kindTk = rec.typeTk != null ? rec.typeTk : (legacy || "loc");
   TRAINS.push({
-    id:"T"+TRAINS.length, kind: rec.type==="exp" ? "exp" : "loc",
+    id:"T"+TRAINS.length, kindSo, kindTk,
     branch: rec.branch, dest: rec.dest, origin: rec.origin, dir, stops
   });
 }
@@ -604,7 +609,13 @@ function fmt(m){
   m = ((m % 1440) + 1440) % 1440;
   return Math.floor(m/60) + ":" + String(m%60).padStart(2,"0");
 }
-function typeLabel(tr){ return tr.kind==="exp" ? "急行" : "各停"; }
+/* 乗車駅がどの会社の区間かで種別ラベルを決める(相鉄=特急、東急=急行)。 */
+function typeLabelFor(tr, station){
+  const isSotetsu = stationLine(station, tr) === "SO";
+  const kind = isSotetsu ? tr.kindSo : tr.kindTk;
+  if(kind !== "exp") return "各停";
+  return isSotetsu ? "特急" : "急行";
+}
 function descFor(tr){
   if(tr.branch==="TY") return tr.dir==="nb" ? "東横線直通(渋谷方面)・並走区間で乗換可" : "東横線から新横浜線直通";
   const via = tr.branch==="I" ? "三田線" : "南北線";
@@ -654,7 +665,7 @@ function chainToLegs(chain){
     legs.push({
       kind:"ride",
       lines: legLineCodes(leg),
-      type: typeLabel(leg.t)+" "+leg.t.dest+"行",
+      type: typeLabelFor(leg.t, bo[0])+" "+leg.t.dest+"行",
       desc: descFor(leg.t),
       from: bo[0], dep: fmt(bo[2]),
       to: al[0],  arr: fmt(al[1]),
@@ -708,7 +719,7 @@ function findCandidates(from, to, nowMin){
       tr: c.chain.length - 1,
       wait: c.depMin - nowMin,
       lines: legs[0].lines,
-      type: typeLabel(c.train),
+      type: typeLabelFor(c.train, from),
       dest: c.train.dest + "行",
       fastest, note,
       legs
@@ -744,7 +755,7 @@ function findCandidatesByArrival(from, to, targetArrMin){
       tr: c.chain.length - 1,
       wait: c.depMin - nowMinutes(),
       lines: legs[0].lines,
-      type: typeLabel(c.train),
+      type: typeLabelFor(c.train, from),
       dest: c.train.dest + "行",
       fastest, note,
       legs
