@@ -14,8 +14,7 @@
 <style>
   :root{
     --blue:#007AFF; --green:#34C759; --red:#FF3B30; --orange:#FF9500; --gray:#8E8E93;
-    --tint:#DA0442; /* 東急東横線レッドをtintに */
-    --ty:#DA0442; --mg:#009CD2; --sh:#8F76D6; --mita:#0079C2; --nam:#00AC9A; --fuku:#9C5E31;
+    /* --tint / --tint-shadow / --tint-soft は network.js の theme から起動時に注入 */
     --safe-t: env(safe-area-inset-top, 20px);
     --safe-b: env(safe-area-inset-bottom, 0px);
   }
@@ -23,13 +22,11 @@
     --bg:#F2F2F7; --card:#FFFFFF; --label:#000000; --label2:rgba(60,60,67,0.6);
     --label3:rgba(60,60,67,0.3); --sep:rgba(60,60,67,0.29); --fill:rgba(120,120,128,0.16);
     --navblur:rgba(249,249,249,0.82); --tabblur:rgba(249,249,249,0.82);
-    --heroTop:#B4003A; --heroBottom:#DA0442;
   }
   .screen.dark{
     --bg:#000000; --card:#1C1C1E; --label:#FFFFFF; --label2:rgba(235,235,245,0.6);
     --label3:rgba(235,235,245,0.3); --sep:rgba(84,84,88,0.65); --fill:rgba(120,120,128,0.32);
     --navblur:rgba(29,29,31,0.78); --tabblur:rgba(29,29,31,0.78);
-    --heroTop:#7A0025; --heroBottom:#B4003A;
   }
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{height:100%;overscroll-behavior:none;}
@@ -123,7 +120,7 @@
   .hero{
     border-radius:16px;padding:18px;color:#fff;position:relative;overflow:hidden;cursor:pointer;
     background:linear-gradient(150deg,var(--heroTop),var(--heroBottom));
-    box-shadow:0 8px 24px rgba(218,4,66,0.28);transition:transform 0.2s;
+    box-shadow:0 8px 24px var(--tint-shadow);transition:transform 0.2s;
   }
   .hero:active{transform:scale(0.98);}
   .hero .eyebrow{font-size:12px;font-weight:600;opacity:0.85;letter-spacing:0.4px;}
@@ -159,7 +156,7 @@
   .btn-filled:disabled{background:var(--fill);color:var(--label3);}
   .btn-filled:active:not(:disabled){opacity:0.4;}
   .btn-tinted{
-    display:inline-block;border:none;background:rgba(218,4,66,0.14);color:var(--tint);
+    display:inline-block;border:none;background:var(--tint-soft);color:var(--tint);
     font-family:inherit;font-size:15px;font-weight:600;padding:8px 16px;border-radius:20px;cursor:pointer;
   }
   .btn-tinted:active{opacity:0.4;}
@@ -335,7 +332,7 @@
             <div class="section-header">情報</div>
             <div class="group">
               <div class="cell" onclick="flashCell(this)">
-                <div class="main"><div class="title">対応路線</div><div class="sub">東横線・目黒線・新横浜線と直通各線</div></div>
+                <div class="main"><div class="title">対応路線</div><div class="sub" id="supportedLinesSub"></div></div>
                 <div class="chevron">›</div>
               </div>
               <div class="cell" onclick="flashCell(this)">
@@ -418,7 +415,18 @@
           <span style="width:74px;"></span>
         </div>
         <div class="sheet-body">
-          <div class="section-header" style="padding-top:8px;">基準時刻</div>
+          <div class="section-header" style="padding-top:8px;">ダイヤ</div>
+          <div class="group">
+            <div class="cell" onclick="setCalendar('weekday')" style="cursor:pointer;">
+              <div class="main"><div class="title">平日</div></div>
+              <div class="check" id="chkWeekday">✓</div>
+            </div>
+            <div class="cell" onclick="setCalendar('holiday')" style="cursor:pointer;">
+              <div class="main"><div class="title">土曜・休日</div></div>
+              <div class="check" id="chkHoliday">✓</div>
+            </div>
+          </div>
+          <div class="section-header">基準時刻</div>
           <div class="group">
             <div class="cell" onclick="setTimeMode('now')" style="cursor:pointer;">
               <div class="main"><div class="title">現在時刻</div></div>
@@ -463,15 +471,23 @@
 <script>
 "use strict";
 /* ═════════ 路線メタ ═════════ */
-const LINES = {
-  SH:{c:"var(--sh)",  s:"SH", name:"東急新横浜線"},
-  TY:{c:"var(--ty)",  s:"TY", name:"東急東横線"},
-  MG:{c:"var(--mg)",  s:"MG", name:"東急目黒線"},
-  I: {c:"var(--mita)",s:"I",  name:"都営三田線"},
-  N: {c:"var(--nam)", s:"N",  name:"東京メトロ南北線"},
-  SO:{c:"#0B2A6B",    s:"SO", name:"相鉄線"},
-  SR:{c:"#1CADCA",    s:"SR", name:"埼玉高速鉄道"}
-};
+/* 路線メタ・色・テーマ・文言はすべて network.js の NETWORK から取得する */
+const LINES = NETWORK.lines;
+(function applyNetworkTheme(){
+  const t = NETWORK.theme || {};
+  const rgb = t.tintRgb || "218,4,66";
+  const hl = t.heroLight || {top:"#B4003A",bottom:"#DA0442"};
+  const hd = t.heroDark  || {top:"#7A0025",bottom:"#B4003A"};
+  const css =
+    ":root{--tint:"+(t.tint||"#DA0442")+";--tint-shadow:rgba("+rgb+",0.28);--tint-soft:rgba("+rgb+",0.14);}"+
+    ".screen{--heroTop:"+hl.top+";--heroBottom:"+hl.bottom+";}"+
+    ".screen.dark{--heroTop:"+hd.top+";--heroBottom:"+hd.bottom+";}";
+  const st = document.createElement("style"); st.textContent = css; document.head.appendChild(st);
+  const m = document.querySelector('meta[name=theme-color]'); if(m && t.themeColor) m.content = t.themeColor;
+  if(NETWORK.appName) document.title = NETWORK.appName;
+  const sl = document.getElementById("supportedLinesSub");
+  if(sl && NETWORK.captions && NETWORK.captions.supportedLines) sl.textContent = NETWORK.captions.supportedLines;
+})();
 
 /* ═════════ ネットワーク定義: network.js(共有ファイル)から取得 ═════════
    路線・駅の追加・変更は network.js だけを編集する。
@@ -493,7 +509,7 @@ function stationLine(st, train){
     if(branchLine) return branchLine; // 列車の系統(branch)に一致する規則があれば即採用
     if(fallback === null) fallback = rule.default;
   }
-  return fallback || "MG";
+  return fallback || NETWORK.defaultLine;
 }
 
 /* 対面乗り換え可能駅(乗換0分)・急行通過駅・経路登録の駅リスト */
@@ -523,6 +539,10 @@ function parseTimeStr(v){
 /* インプットツール(timetable-input-tool.html)が書き出す trains配列(schemaVersion 2)を
    直接読み込む。各駅の着(arr)・発(dep)が別々に記録されている場合はそのまま使い、
    片方しか無い場合はもう片方で補う。 */
+/* カレンダー正規化: ODPT/各社表記を weekday / holiday の2値に寄せる */
+function normalizeCal(c){
+  return (typeof c === "string" && /hol|sat|sun|土|休|祝/i.test(c)) ? "holiday" : "weekday";
+}
 function makeTrainFromRecord(rec){
   const stops = (rec.stops||[]).map(s=>{
     const arr = parseTimeStr(s.arr), dep = parseTimeStr(s.dep);
@@ -536,7 +556,7 @@ function makeTrainFromRecord(rec){
   if(dir !== "nb" && dir !== "sb"){
     // 明示指定が無い場合のみ推測(後方互換): 系統の東側終端駅への駅数で判定
     const branchDef = NETWORK.branches[rec.branch];
-    const anchor = branchDef ? branchDef.eastAnchor : "浦和美園";
+    const anchor = branchDef ? branchDef.eastAnchor : NETWORK.defaultAnchor;
     const dist = netBfsDist(anchor);
     const d0 = dist.get(stops[0][0]), d1 = dist.get(stops[stops.length-1][0]);
     dir = (d0 != null && d1 != null && d1 > d0) ? "sb" : "nb";
@@ -547,7 +567,7 @@ function makeTrainFromRecord(rec){
   const kindSo = rec.typeSo != null ? rec.typeSo : (legacy || "loc");
   const kindTk = rec.typeTk != null ? rec.typeTk : (legacy || "loc");
   TRAINS.push({
-    id:"T"+TRAINS.length, kindSo, kindTk,
+    id:"T"+TRAINS.length, kindSo, kindTk, calendar: normalizeCal(rec.calendar),
     branch: rec.branch, dest: rec.dest, origin: rec.origin, dir, stops
   });
 }
@@ -594,6 +614,7 @@ function bestArrival(train, idx, to, left, memo){
         if(d2 < tm) continue;          // 対面乗り換え0分: 到着時刻以降の発車に乗れる
         if(d2 > tm + WAIT_CAP) break;  // 待ち時間上限
         if(u === train) continue;
+        if(u.calendar !== state.calendar) continue; // 同一ダイヤ(平日/土休日)内でのみ乗換
         const r = bestArrival(u, k, to, left-1, memo);
         if(r && (!best || r.arr < best.arr)){
           best = { arr:r.arr, chain:[{t:train, bi:idx, ai:j}, ...r.chain] };
@@ -609,20 +630,11 @@ function fmt(m){
   m = ((m % 1440) + 1440) % 1440;
   return Math.floor(m/60) + ":" + String(m%60).padStart(2,"0");
 }
-/* 乗車駅がどの会社の区間かで種別ラベルを決める(相鉄=特急、東急=急行)。 */
+/* 種別ラベルは network.js の netTypeLabel に委譲(路線固有) */
 function typeLabelFor(tr, station){
-  const isSotetsu = stationLine(station, tr) === "SO";
-  const kind = isSotetsu ? tr.kindSo : tr.kindTk;
-  if(kind !== "exp") return "各停";
-  return isSotetsu ? "特急" : "急行";
+  return netTypeLabel(tr, stationLine(station, tr));
 }
-function descFor(tr){
-  if(tr.branch==="TY") return tr.dir==="nb" ? "東横線直通(渋谷方面)・並走区間で乗換可" : "東横線から新横浜線直通";
-  const via = tr.branch==="I" ? "三田線" : "南北線";
-  if(tr.origin==="白金高輪") return "白金高輪始発・座れる可能性大";
-  if(tr.origin==="日吉") return "日吉始発・目黒線→"+via+" 直通";
-  return (tr.dir==="nb" ? "新横浜線→目黒線→"+via : via+"→目黒線→新横浜線")+" 直通";
-}
+function descFor(tr){ return netTrainDesc(tr); }
 function stopSummary(leg){
   const s = leg.t.stops;
   const mid = [];
@@ -678,7 +690,7 @@ function chainToLegs(chain){
 function findCandidates(from, to, nowMin){
   const distMap = netBfsDist(to);
   if(!distMap.has(from)) return [];
-  const deps = (stationDeps.get(from) || []).filter(d=>d[0] >= nowMin && dirTowards(d[1], d[2], distMap));
+  const deps = (stationDeps.get(from) || []).filter(d=>d[0] >= nowMin && d[1].calendar === state.calendar && dirTowards(d[1], d[2], distMap));
   const out = [];
   for(const [d, tr, idx] of deps){
     if(out.length >= 5) break;
@@ -730,7 +742,7 @@ function findCandidates(from, to, nowMin){
 function findCandidatesByArrival(from, to, targetArrMin){
   const distMap = netBfsDist(to);
   if(!distMap.has(from)) return [];
-  const deps = (stationDeps.get(from) || []).filter(d=>d[0] <= targetArrMin && dirTowards(d[1], d[2], distMap));
+  const deps = (stationDeps.get(from) || []).filter(d=>d[0] <= targetArrMin && d[1].calendar === state.calendar && dirTowards(d[1], d[2], distMap));
   const out = [];
   for(const [d, tr, idx] of deps){
     const r = bestArrival(tr, idx, to, MAX_TRANSFERS, new Map());
@@ -783,7 +795,7 @@ function loadPersisted(){
 function persist(){
   try{
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      routes: state.routes, selectedRoute: state.selectedRoute, dark: state.dark
+      routes: state.routes, selectedRoute: state.selectedRoute, dark: state.dark, calendar: state.calendar
     }));
   }catch(e){
     console.warn("どれトレ: 保存データの書き込みに失敗しました", e);
@@ -796,6 +808,7 @@ let state = {
   currentCands: [],
   searchMode:"now", searchTimeMin:null, // "now" | "depart" | "arrive"
   pendingTimeMode:"now",
+  calendar:"weekday", pendingCalendar:"weekday", // "weekday" | "holiday"
   routes: []
 };
 
@@ -848,6 +861,7 @@ function renderHome(){
     if(cands.length===0){ cands = findCandidates(r.from, r.to, 5*60); tomorrow = true; }
     modeLabel = "現在時刻で検索中";
   }
+  modeLabel = (state.calendar === "holiday" ? "土休日" : "平日") + "・" + modeLabel;
   state.currentCands = cands;
 
   let html = '<div class="chips">';
@@ -1008,7 +1022,7 @@ function openDetail(ci){
     }
   });
   html += '</div>';
-  html += '<p class="caption" style="padding:14px 4px 8px;">日吉〜田園調布間の各駅と白金高輪では、同じホームの向かい側で乗り換えできます。</p>';
+  html += '<p class="caption" style="padding:14px 4px 8px;">'+(NETWORK.captions&&NETWORK.captions.transferNote||"")+'</p>';
   $("detail-content").innerHTML = html;
   $("detail-content").scrollTop = 0;
   $("page-detail").classList.add("open");
@@ -1070,6 +1084,11 @@ function closeSheet(){
 }
 
 /* ═════════ 検索条件(出発/到着時刻)シート ═════════ */
+function setCalendar(cal){
+  state.pendingCalendar = cal;
+  $("chkWeekday").style.visibility = cal === "weekday" ? "visible" : "hidden";
+  $("chkHoliday").style.visibility = cal === "holiday" ? "visible" : "hidden";
+}
 function setTimeMode(mode){
   state.pendingTimeMode = mode;
   ["Now","Depart","Arrive"].forEach(k=>{
@@ -1089,6 +1108,8 @@ function openTimeSheet(){
   const initMin = state.searchTimeMin != null ? state.searchTimeMin : nowMinutes();
   $("timeInputValue").value = fmt(initMin);
   setTimeMode(state.searchMode);
+  state.pendingCalendar = state.calendar;
+  setCalendar(state.calendar);
   $("dim").classList.add("show");
   $("timeSheet").classList.add("show");
 }
@@ -1108,6 +1129,7 @@ function applyTimeSetting(){
     state.searchMode = mode;
     state.searchTimeMin = hh*60+mm;
   }
+  state.calendar = state.pendingCalendar;
   closeTimeSheet();
   renderHome();
 }
@@ -1143,7 +1165,10 @@ function setDark(on){
     if(saved.routes.length) state.routes = saved.routes;
     state.selectedRoute = saved.selectedRoute || 0;
     state.dark = !!saved.dark;
+    if(saved.calendar === "weekday" || saved.calendar === "holiday") state.calendar = saved.calendar;
+    else { const wd = new Date().getDay(); state.calendar = (wd === 0 || wd === 6) ? "holiday" : "weekday"; }
   }else{
+    const wd = new Date().getDay(); state.calendar = (wd === 0 || wd === 6) ? "holiday" : "weekday";
     persist();
   }
   $("screen").classList.toggle("dark", state.dark);
@@ -1152,16 +1177,24 @@ function setDark(on){
 buildPickers();
 $("home-content").innerHTML = '<div class="empty"><h3>時刻表を読み込み中…</h3><p>初回のみ少し時間がかかることがあります。</p></div>';
 
-function loadJSON(url){
-  return fetch(url)
-    .then(r => { if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
-    .catch(e => { console.warn("どれトレ: "+url+" の読み込みに失敗しました", e); return null; });
+/* trains-input.js を <script> で読み込み、window.__TRAINS_INPUT__ を得る(file:// 用フォールバック) */
+function loadTrainsScript(){
+  return new Promise(resolve => {
+    if(window.__TRAINS_INPUT__){ resolve(window.__TRAINS_INPUT__); return; }
+    const el = document.createElement("script");
+    el.src = "./trains-input.js";
+    el.onload  = () => resolve(window.__TRAINS_INPUT__ || null);
+    el.onerror = () => { console.warn("どれトレ: trains-input.js の読み込みにも失敗しました"); resolve(null); };
+    document.head.appendChild(el);
+  });
 }
-
-/* 時刻表データは trains-input.json 1ファイルのみ。
-   インプットツールの「JSONをダウンロード」で書き出したファイルを
-   この名前でそのまま上書きアップロードすれば反映される。 */
-loadJSON("./trains-input.json").then(data => {
+/* まず trains-input.json を fetch、失敗(主に file://)したら trains-input.js にフォールバック */
+function loadTrainsData(){
+  return fetch("./trains-input.json")
+    .then(r => { if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
+    .catch(e => { console.warn("どれトレ: trains-input.json の fetch に失敗。trains-input.js にフォールバック", e); return loadTrainsScript(); });
+}
+loadTrainsData().then(data => {
   generateTimetable(data ? data.trains : null);
 }).finally(() => {
   renderHome();

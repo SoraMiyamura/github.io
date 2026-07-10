@@ -1,4 +1,4 @@
-{
+window.__TRAINS_INPUT__ = {
   "schemaVersion": 2,
   "trains": [
     {
@@ -68641,4 +68641,4 @@
       ]
     }
   ]
-}
+};
