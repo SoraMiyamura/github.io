@@ -255,6 +255,16 @@
   @media (prefers-reduced-motion: reduce){
     *,*::before,*::after{transition:none!important;animation:none!important;}
   }
+  /* 停車駅 詳細トグル */
+  .stops-toggle{
+    border:none;background:var(--tint-soft);color:var(--tint);font-family:inherit;
+    font-size:11px;font-weight:600;padding:2px 9px;border-radius:10px;cursor:pointer;margin-left:6px;
+    vertical-align:1px;
+  }
+  .stops-toggle:active{opacity:0.5;}
+  .stops-detail{margin-top:6px;padding:6px 10px;background:var(--fill);border-radius:8px;}
+  .stops-row{display:flex;justify-content:space-between;padding:2px 0;font-size:12px;color:var(--label2);}
+  .stops-row+.stops-row{border-top:0.5px solid var(--sep);}
 </style>
 </head>
 <body>
@@ -544,12 +554,15 @@ function normalizeCal(c){
   return (typeof c === "string" && /hol|sat|sun|土|休|祝/i.test(c)) ? "holiday" : "weekday";
 }
 function makeTrainFromRecord(rec){
-  const stops = (rec.stops||[]).map(s=>{
+  const recStops = rec.stops || [];
+  const names = recStops.map(s=>s.station);
+  if(typeof netFixStops === "function") netFixStops(names); // 新宿の実体(新線/京王本線)を確定
+  const stops = recStops.map((s,i)=>{
     const arr = parseTimeStr(s.arr), dep = parseTimeStr(s.dep);
     const a = arr != null ? arr : dep;
     const d = dep != null ? dep : arr;
     if(a == null) return null;
-    return [s.station, a, d];
+    return [names[i], a, d, s.type || null]; // [駅, 着分, 発分, 区間種別(任意)]
   }).filter(Boolean);
   if(stops.length < 2) return;
   let dir = rec.dir; // インプットツールで明示的に指定された方向を優先
@@ -568,7 +581,10 @@ function makeTrainFromRecord(rec){
   const kindTk = rec.typeTk != null ? rec.typeTk : (legacy || "loc");
   TRAINS.push({
     id:"T"+TRAINS.length, kindSo, kindTk, calendar: normalizeCal(rec.calendar),
-    branch: rec.branch, dest: rec.dest, origin: rec.origin, dir, stops
+    branch: rec.branch,
+    dest: (rec.dest === "新宿" ? names[names.length-1] : rec.dest),
+    origin: (rec.origin === "新宿" ? names[0] : rec.origin),
+    dir, stops
   });
 }
 function applyTrainsArray(trains){
@@ -630,9 +646,12 @@ function fmt(m){
   m = ((m % 1440) + 1440) % 1440;
   return Math.floor(m/60) + ":" + String(m%60).padStart(2,"0");
 }
-/* 種別ラベルは network.js の netTypeLabel に委譲(路線固有) */
+/* 種別ラベル: 乗車駅の区間種別(stops[3])があればそれを、無ければ列車既定を使う。 */
 function typeLabelFor(tr, station){
-  return netTypeLabel(tr, stationLine(station, tr));
+  let kind = null;
+  const st = tr.stops.find(x=>x[0]===station);
+  if(st && st[3]) kind = st[3];
+  return netTypeLabel(tr, stationLine(station, tr), kind);
 }
 function descFor(tr){ return netTrainDesc(tr); }
 function stopSummary(leg){
@@ -644,29 +663,22 @@ function stopSummary(leg){
   return mid.slice(0,3).join("・") + " ほか" + (mid.length-3) + "駅";
 }
 function legLineCodes(leg){
-  // このleg(乗換までの連続乗車)が乗り入れる路線を、乗車駅から列車の最終停車駅まで
-  // たどって重複除去する。最大2つ(現在の路線・次に乗り入れる路線)を返す。
+  // このleg(乗換までの連続乗車)が「実際に走行する区間」だけを見て、乗り入れる
+  // 路線を求める。乗車駅→降車駅の各区間(隣り合う停車駅)を netEdgeLine で判定し、
+  // 重複除去する。列車が降車駅の先(都営新宿線など)へ直通していても、そこへは
+  // 乗らないので含めない。これにより「明大前→新宿(京王線内完結)」や
+  // 「京王本線 新宿行き(新線非経由)」で都営新宿線バッジが出る誤りを防ぐ。
+  // 最大2つ(乗車路線・直通先路線)を返す。
   const st = leg.t.stops;
   const codes = [];
-  for(let i = leg.bi; i < st.length; i++){
-    const code = stationLine(st[i][0], leg.t);
+  const end = Math.min(leg.ai, st.length - 1);
+  for(let i = leg.bi; i < end; i++){
+    let code = (typeof netEdgeLine === "function") ? netEdgeLine(st[i][0], st[i+1][0], leg.t) : null;
+    if(code == null) code = stationLine(st[i][0], leg.t);
     if(codes[codes.length-1] !== code) codes.push(code);
-    if(codes.length >= 2) return codes;
+    if(codes.length >= 2) break;
   }
-  /* 記録された停車データがそこで尽きた場合、行先ラベル(dest)まで路線図上で
-     たどれるなら、その先の路線も2つ目のバッジ候補として補う。
-     (例: 記録は飯田橋までだが行先は浦和美園 → 先の埼玉高速区間もバッジに反映) */
-  const lastStop = st[st.length-1][0];
-  if(leg.t.dest && leg.t.dest !== lastStop){
-    const path = netBfsPath(lastStop, leg.t.dest);
-    if(path){
-      for(const name of path){
-        const code = stationLine(name, leg.t);
-        if(codes[codes.length-1] !== code) codes.push(code);
-        if(codes.length >= 2) break;
-      }
-    }
-  }
+  if(codes.length === 0) codes.push(stationLine(st[leg.bi][0], leg.t));
   return codes;
 }
 function chainToLegs(chain){
@@ -681,13 +693,43 @@ function chainToLegs(chain){
       desc: descFor(leg.t),
       from: bo[0], dep: fmt(bo[2]),
       to: al[0],  arr: fmt(al[1]),
-      stops: stopSummary(leg)
+      stops: stopSummary(leg),
+      stopsList: (function(){ const arr=[]; for(let k=leg.bi+1;k<leg.ai;k++) arr.push({name:leg.t.stops[k][0], time:fmt(leg.t.stops[k][1])}); return arr; })()
     });
   });
   return legs;
 }
 
+/* 駅グループ(新宿=新宿+京王新宿)対応: from/to をメンバーへ展開し統合・再ランクする。
+   各候補に toStation(実際に着く物理ノード)を付け、案内表示で新線/本線を出し分ける。 */
+function netMergeCandidates(from, to, fn){
+  const froms = (typeof netExpandStation==="function") ? netExpandStation(from) : [from];
+  const tos   = (typeof netExpandStation==="function") ? netExpandStation(to)   : [to];
+  let out = [];
+  for(const f of froms){ for(const t of tos){ if(f===t) continue;
+    fn(f, t).forEach(c=>{ c.toStation = t; out.push(c); });
+  }}
+  if(out.length===0) return out;
+  out.sort((a,b)=> a.depMin - b.depMin || a.arrMin - b.arrMin);
+  let bi = 0;
+  out.forEach((c,i)=>{
+    const b = out[bi];
+    if(c.arrMin < b.arrMin || (c.arrMin===b.arrMin && (c.tr < b.tr || (c.tr===b.tr && c.depMin < b.depMin)))) bi = i;
+  });
+  const minArr = out[bi].arrMin;
+  out.forEach((c,i)=>{
+    c.fastest = (i===bi);
+    c.note = c.fastest ? "この時間帯の最速ルートです" : "最速より +"+(c.arrMin-minArr)+"分";
+  });
+  return out.slice(0, 6);
+}
 function findCandidates(from, to, nowMin){
+  return netMergeCandidates(from, to, (f,t)=>findCandidatesSingle(f, t, nowMin));
+}
+function findCandidatesByArrival(from, to, targetArrMin){
+  return netMergeCandidates(from, to, (f,t)=>findCandidatesByArrivalSingle(f, t, targetArrMin));
+}
+function findCandidatesSingle(from, to, nowMin){
   const distMap = netBfsDist(to);
   if(!distMap.has(from)) return [];
   const deps = (stationDeps.get(from) || []).filter(d=>d[0] >= nowMin && d[1].calendar === state.calendar && dirTowards(d[1], d[2], distMap));
@@ -739,7 +781,7 @@ function findCandidates(from, to, nowMin){
   });
 }
 
-function findCandidatesByArrival(from, to, targetArrMin){
+function findCandidatesByArrivalSingle(from, to, targetArrMin){
   const distMap = netBfsDist(to);
   if(!distMap.has(from)) return [];
   const deps = (stationDeps.get(from) || []).filter(d=>d[0] <= targetArrMin && d[1].calendar === state.calendar && dirTowards(d[1], d[2], distMap));
@@ -827,6 +869,15 @@ function badges(lines, size){
     badge(lines[1], size)+
   '</div>';
 }
+/* バッジを縦積み(上=乗車路線 / 下=直通先路線)。発車順にくらべるで使用。 */
+function badgesV(lines, size){
+  if(!lines || lines.length===0) return "";
+  if(lines.length===1) return badge(lines[0], size);
+  return '<div style="display:flex;flex-direction:column;align-items:center;gap:2px;">'+
+    badge(lines[0], size)+
+    badge(lines[1], size)+
+  '</div>';
+}
 function flashCell(el){}
 function nowMinutes(){
   const d = new Date();
@@ -887,7 +938,7 @@ function renderHome(){
   html +=
     '<div class="hero" onclick="openDetail('+bi+')">'+
       '<div class="pill">最速</div>'+
-      '<div class="eyebrow">'+r.from+' → '+r.to+'　次に乗るべき電車'+(tomorrow?'(明朝)':'')+'</div>'+
+      '<div class="eyebrow">'+r.from+' → '+(arrivalLabel(best)||r.to)+'　次に乗るべき電車'+(tomorrow?'(明朝)':'')+'</div>'+
       '<div class="dep">'+best.dep+'<small> 発'+(tomorrow?'':'(あと'+best.wait+'分)')+'</small></div>'+
       '<div class="train">'+badges(best.lines,22)+best.type+' '+best.dest+'</div>'+
       '<div class="meta"><span>到着 '+best.arr+'</span><span>所要 '+best.dur+'分</span><span>乗り換え '+best.tr+'回</span></div>'+
@@ -901,9 +952,9 @@ function renderHome(){
     html +=
       '<div class="cell" onclick="openDetail('+i+')">'+
         '<div class="cand-time">'+cd.dep+'</div>'+
-        badges(cd.lines)+
+        badgesV(cd.lines)+
         '<div class="main"><div class="title" style="font-size:15px;font-weight:600;">'+cd.type+' '+cd.dest+'</div>'+
-        '<div class="sub">乗り換え'+cd.tr+'回 · 所要'+cd.dur+'分</div></div>'+
+        '<div class="sub">乗り換え'+cd.tr+'回 · 所要'+cd.dur+'分'+(arrivalLabel(cd)?' · '+arrivalLabel(cd)+'着':'')+'</div></div>'+
         '<div class="arr-tag"><div class="big">'+cd.arr+'着</div>'+diff+'</div>'+
         '<div class="chevron">›</div>'+
       '</div>';
@@ -913,6 +964,12 @@ function renderHome(){
   c.innerHTML = html;
 }
 function selectRoute(i){ state.selectedRoute = i; persist(); renderHome(); }
+/* 着駅のホーム表示名。グループ駅(新宿/京王新宿)は「新宿 (新線)」等、その他は付けない */
+function arrivalLabel(cd){
+  const st = cd.toStation;
+  if(st && typeof netGroupOf==="function" && netGroupOf(st)) return netDisplayStation(st);
+  return null;
+}
 
 /* ═════════ render: routes ═════════ */
 function renderRoutes(){
@@ -984,7 +1041,7 @@ function openDetail(ci){
   const cd = state.currentCands[ci];
   if(!cd) return;
   const r = state.routes[state.selectedRoute];
-  $("detail-title").textContent = cd.dep + "発 · " + r.from + " → " + r.to;
+  $("detail-title").textContent = cd.dep + "発 · " + r.from + " → " + (arrivalLabel(cd) || r.to);
   let html =
     '<div class="summary-grid">'+
       '<div class="sum-card"><div class="v">'+cd.arr+'</div><div class="k">到着時刻</div></div>'+
@@ -1004,15 +1061,16 @@ function openDetail(ci){
       const lineNames = leg.lines.map(code=>LINES[code].name).join("→");
       html +=
         '<div class="tl-row"><div class="tl-line"><div class="tl-dot" style="border-color:'+l.c+';"></div></div>'+
-        '<div style="flex:1;"><span class="tl-station">'+leg.from+'</span> <span class="tl-time">'+leg.dep+'発</span></div></div>'+
+        '<div style="flex:1;"><span class="tl-station">'+netDisplayStation(leg.from)+'</span> <span class="tl-time">'+leg.dep+'発</span></div></div>'+
         '<div class="tl-row"><div class="tl-line"><div class="tl-bar" style="background:'+l.c+';"></div></div>'+
         '<div class="tl-train" style="flex:1;">'+
           '<div class="name">'+badges(leg.lines,20)+lineNames+' '+leg.type+'</div>'+
           '<div class="note">'+leg.desc+'</div>'+
-          '<div class="note">停車駅: '+leg.stops+'</div>'+
+          '<div class="note">停車駅: '+leg.stops+((leg.stopsList&&leg.stopsList.length)?' <button class="stops-toggle" onclick="toggleStops(this)">詳細</button>':'')+'</div>'+
+          ((leg.stopsList&&leg.stopsList.length)?'<div class="stops-detail" style="display:none;">'+leg.stopsList.map(s=>'<div class="stops-row"><span>'+netDisplayStation(s.name)+'</span><span>'+s.time+'発</span></div>').join('')+'</div>':'')+
         '</div></div>'+
         '<div class="tl-row"><div class="tl-line"><div class="tl-dot" style="border-color:'+l.c+';"></div></div>'+
-        '<div style="flex:1;"><span class="tl-station">'+leg.to+'</span> <span class="tl-time">'+leg.arr+'着</span></div></div>';
+        '<div style="flex:1;"><span class="tl-station">'+netDisplayStation(leg.to)+'</span> <span class="tl-time">'+leg.arr+'着</span></div></div>';
     }else{
       html +=
         '<div class="tl-row"><div class="tl-line"><div class="tl-bar walk"></div></div>'+
@@ -1031,6 +1089,14 @@ function openDetail(ci){
 function closeDetail(){
   $("page-detail").classList.remove("open");
   $("tabsHolder").classList.remove("pushed");
+}
+/* 停車駅「詳細」ボタン: その区間の停車駅一覧を開閉する */
+function toggleStops(btn){
+  const d = btn.parentElement.nextElementSibling;
+  if(!d || !d.classList.contains("stops-detail")) return;
+  const open = d.style.display !== "none";
+  d.style.display = open ? "none" : "block";
+  btn.textContent = open ? "詳細" : "閉じる";
 }
 
 /* ═════════ tabs ═════════ */
@@ -1177,7 +1243,6 @@ function setDark(on){
 buildPickers();
 $("home-content").innerHTML = '<div class="empty"><h3>時刻表を読み込み中…</h3><p>初回のみ少し時間がかかることがあります。</p></div>';
 
-/* trains-input.js を <script> で読み込み、window.__TRAINS_INPUT__ を得る(file:// 用フォールバック) */
 function loadTrainsScript(){
   return new Promise(resolve => {
     if(window.__TRAINS_INPUT__){ resolve(window.__TRAINS_INPUT__); return; }
@@ -1188,7 +1253,6 @@ function loadTrainsScript(){
     document.head.appendChild(el);
   });
 }
-/* まず trains-input.json を fetch、失敗(主に file://)したら trains-input.js にフォールバック */
 function loadTrainsData(){
   return fetch("./trains-input.json")
     .then(r => { if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
