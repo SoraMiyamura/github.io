@@ -148,6 +148,11 @@
   }
   .chip.on{background:var(--tint);color:#fff;}
   .chip:active{opacity:0.6;}
+  .chip-search{
+    flex:none;width:34px;height:34px;border-radius:50%;border:none;background:var(--fill);
+    color:var(--label);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;
+  }
+  .chip-search:active{opacity:0.5;}
   /* ── buttons ── */
   .btn-filled{
     display:block;width:100%;border:none;background:var(--tint);color:#fff;font-family:inherit;
@@ -391,7 +396,7 @@
         <div class="grabber"></div>
         <div class="sheet-head">
           <button class="nav-btn" style="padding-left:0;" onclick="closeSheet()">キャンセル</button>
-          <h2>経路を追加</h2>
+          <h2 id="sheetTitle">経路を追加</h2>
           <span style="width:74px;"></span>
         </div>
         <div class="sheet-body">
@@ -411,8 +416,8 @@
             </div>
             <div class="picker-list" id="picker-to"></div>
           </div>
-          <p class="footnote" style="padding:14px 4px 18px;">登録した経路は起動時にすぐ表示され、次に乗るべき電車を案内します。</p>
-          <button class="btn-filled" id="saveRouteBtn" disabled onclick="saveRoute()">経路を保存</button>
+          <p class="footnote" id="sheetHint" style="padding:14px 4px 18px;">登録した経路は起動時にすぐ表示され、次に乗るべき電車を案内します。</p>
+          <button class="btn-filled" id="saveRouteBtn" disabled onclick="sheetPrimary()">経路を保存</button>
         </div>
       </div>
 
@@ -681,6 +686,9 @@ function legLineCodes(leg){
   if(codes.length === 0) codes.push(stationLine(st[leg.bi][0], leg.t));
   return codes;
 }
+/* 行先ラベル用: 「京王新宿」など駅グループの内部ノード名は素の名前(新宿)に戻す。
+   ※到着ホームの出し分け(新宿(京王本線)等)は arrivalLabel 側で別途行う。 */
+function destName(st){ return (typeof netGroupOf==="function" && netGroupOf(st)) || st; }
 function chainToLegs(chain){
   const legs = [];
   chain.forEach((leg, i)=>{
@@ -689,7 +697,7 @@ function chainToLegs(chain){
     legs.push({
       kind:"ride",
       lines: legLineCodes(leg),
-      type: typeLabelFor(leg.t, bo[0])+" "+leg.t.dest+"行",
+      type: typeLabelFor(leg.t, bo[0])+" "+destName(leg.t.dest)+"行",
       desc: descFor(leg.t),
       from: bo[0], dep: fmt(bo[2]),
       to: al[0],  arr: fmt(al[1]),
@@ -774,7 +782,7 @@ function findCandidatesSingle(from, to, nowMin){
       wait: c.depMin - nowMin,
       lines: legs[0].lines,
       type: typeLabelFor(c.train, from),
-      dest: c.train.dest + "行",
+      dest: destName(c.train.dest) + "行",
       fastest, note,
       legs
     };
@@ -810,7 +818,7 @@ function findCandidatesByArrivalSingle(from, to, targetArrMin){
       wait: c.depMin - nowMinutes(),
       lines: legs[0].lines,
       type: typeLabelFor(c.train, from),
-      dest: c.train.dest + "行",
+      dest: destName(c.train.dest) + "行",
       fastest, note,
       legs
     };
@@ -846,6 +854,7 @@ function persist(){
 
 let state = {
   dark:false, editing:false, selectedRoute:0, pendingDelete:null,
+  sheetMode:"add", tempRoute:null,
   pickFrom:null, pickTo:null,
   currentCands: [],
   searchMode:"now", searchTimeMin:null, // "now" | "depart" | "arrive"
@@ -858,6 +867,7 @@ let state = {
 const $ = id => document.getElementById(id);
 function badge(line, size){
   const l = LINES[line];
+  if(!l) return "";
   return '<div class="badge" style="background:'+l.c+';'+(size?'width:'+size+'px;height:'+size+'px;':'')+'">'+l.s+'</div>';
 }
 function badges(lines, size){
@@ -885,20 +895,24 @@ function nowMinutes(){
 }
 
 /* ═════════ render: home ═════════ */
+/* 現在ホームで見ている経路: 一時検索(tempRoute)が優先、無ければ選択中のマイ経路 */
+function currentRoute(){ return state.tempRoute || state.routes[state.selectedRoute]; }
 function renderHome(){
   const c = $("home-content");
-  if(state.routes.length === 0){
+  if(state.routes.length === 0 && !state.tempRoute){
     c.innerHTML =
       '<div class="empty">'+
         '<div class="icon"><svg width="56" height="56" viewBox="0 0 56 56" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="12" y="8" width="32" height="36" rx="6"/><path d="M12 32h32M20 44l-4 6M36 44l4 6"/><circle cx="21" cy="38" r="1.8" fill="currentColor"/><circle cx="35" cy="38" r="1.8" fill="currentColor"/></svg></div>'+
         '<h3>経路が未登録です</h3>'+
         '<p>よく使う出発駅と到着駅を登録すると、<br>起動した瞬間に「どの電車に乗るべきか」を表示します。</p>'+
         '<button class="btn-tinted" onclick="switchTab(\'routes\');openSheet()">最初の経路を登録</button>'+
+        '<div style="height:10px;"></div>'+
+        '<button class="btn-tinted" onclick="openSearchSheet()">経路を検索</button>'+
       '</div>';
     return;
   }
   if(state.selectedRoute >= state.routes.length) state.selectedRoute = 0;
-  const r = state.routes[state.selectedRoute];
+  const r = currentRoute();
   const now = nowMinutes();
   let cands, tomorrow = false, modeLabel;
   if(state.searchMode === "depart"){
@@ -916,8 +930,17 @@ function renderHome(){
   state.currentCands = cands;
 
   let html = '<div class="chips">';
+  html += '<button class="chip-search" onclick="openSearchSheet()" aria-label="経路を検索">'+
+    '<svg width="17" height="17" viewBox="0 0 17 17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="7" cy="7" r="5"/><path d="M11 11l4.5 4.5"/></svg>'+
+  '</button>';
+  if(state.tempRoute){
+    html += '<button class="chip on" style="display:inline-flex;align-items:center;gap:5px;" onclick="openSearchSheet()">'+
+      '<svg width="13" height="13" viewBox="0 0 17 17" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="7" cy="7" r="5"/><path d="M11 11l4.5 4.5"/></svg>'+
+      state.tempRoute.from+' → '+state.tempRoute.to+'</button>';
+  }
   state.routes.forEach((rt,i)=>{
-    html += '<button class="chip'+(i===state.selectedRoute?' on':'')+'" onclick="selectRoute('+i+')">'+rt.from+' → '+rt.to+'</button>';
+    const on = !state.tempRoute && i===state.selectedRoute;
+    html += '<button class="chip'+(on?' on':'')+'" onclick="selectRoute('+i+')">'+rt.from+' → '+rt.to+'</button>';
   });
   html += '</div>';
   html += '<div class="cell" onclick="openTimeSheet()" style="background:var(--card);border-radius:10px;margin-bottom:14px;cursor:pointer;">'+
@@ -963,7 +986,7 @@ function renderHome(){
   html += '<p class="caption" style="padding:14px 4px;">'+(tomorrow?'本日の運行は終了しています(明朝5時台以降を表示)。':modeLabel+'('+fmt(now)+'現在)。')+'収録済みの実データ範囲内のみ検索できます。</p>';
   c.innerHTML = html;
 }
-function selectRoute(i){ state.selectedRoute = i; persist(); renderHome(); }
+function selectRoute(i){ state.tempRoute = null; state.selectedRoute = i; persist(); renderHome(); }
 /* 着駅のホーム表示名。グループ駅(新宿/京王新宿)は「新宿 (新線)」等、その他は付けない */
 function arrivalLabel(cd){
   const st = cd.toStation;
@@ -991,7 +1014,7 @@ function renderRoutes(){
     const cands = findCandidates(r.from, r.to, now);
     const best = cands.find(x=>x.fastest);
     const sub = best ? ("最速 "+best.dep+"発 · "+best.arr+"着("+best.dur+"分)") : "現在は運行時間外";
-    const lines = best ? best.lines : ["MG"];
+    const lines = best ? best.lines : [];
     html +=
       '<div class="cell" onclick="goHomeWith('+i+')">'+
         '<button class="minus-btn" onclick="event.stopPropagation();askDelete('+i+')" aria-label="削除">−</button>'+
@@ -1007,6 +1030,7 @@ function renderRoutes(){
 }
 function goHomeWith(i){
   if(state.editing) return;
+  state.tempRoute = null;
   state.selectedRoute = i;
   persist();
   renderHome();
@@ -1040,7 +1064,7 @@ function confirmDelete(){
 function openDetail(ci){
   const cd = state.currentCands[ci];
   if(!cd) return;
-  const r = state.routes[state.selectedRoute];
+  const r = currentRoute();
   $("detail-title").textContent = cd.dep + "発 · " + r.from + " → " + (arrivalLabel(cd) || r.to);
   let html =
     '<div class="summary-grid">'+
@@ -1134,7 +1158,14 @@ function pickStation(which, s){
   const ok = state.pickFrom && state.pickTo && state.pickFrom !== state.pickTo;
   $("saveRouteBtn").disabled = !ok;
 }
-function openSheet(){
+function openSheet(mode){
+  state.sheetMode = (mode === "search") ? "search" : "add";
+  const search = state.sheetMode === "search";
+  $("sheetTitle").textContent = search ? "経路を検索" : "経路を追加";
+  $("sheetHint").textContent = search
+    ? "一時的に2駅間を検索します(マイ経路には保存されません)。"
+    : "登録した経路は起動時にすぐ表示され、次に乗るべき電車を案内します。";
+  $("saveRouteBtn").textContent = search ? "この経路で検索" : "経路を保存";
   state.pickFrom = null; state.pickTo = null;
   $("fromLabel").textContent = "選択してください"; $("fromLabel").style.color = "var(--label2)";
   $("toLabel").textContent = "選択してください"; $("toLabel").style.color = "var(--label2)";
@@ -1143,6 +1174,16 @@ function openSheet(){
   document.querySelectorAll(".picker-list").forEach(p=>p.classList.remove("open"));
   $("dim").classList.add("show");
   $("sheet").classList.add("show");
+}
+function openSearchSheet(){ openSheet("search"); }
+function sheetPrimary(){ if(state.sheetMode === "search") runSearch(); else saveRoute(); }
+function runSearch(){
+  if(state.pickFrom && state.pickTo && state.pickFrom !== state.pickTo){
+    state.tempRoute = { from: state.pickFrom, to: state.pickTo };
+  }
+  closeSheet();
+  renderHome();
+  switchTab("home");
 }
 function closeSheet(){
   $("dim").classList.remove("show");
