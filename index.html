@@ -488,6 +488,13 @@
 /* ═════════ 路線メタ ═════════ */
 /* 路線メタ・色・テーマ・文言はすべて network.js の NETWORK から取得する */
 const LINES = NETWORK.lines;
+/* network.js が駅グループ系ヘルパを提供しない路線(東急版など、新宿のような複数ホーム駅が
+   無い路線)でも詳細画面などが落ちないよう、未定義なら無害な既定実装を注入する。
+   これらを実装している路線(京王版)では typeof チェックで上書きされない。 */
+if(typeof window.netDisplayStation !== "function") window.netDisplayStation = function(s){ return s; };
+if(typeof window.netGroupOf       !== "function") window.netGroupOf       = function(){ return null; };
+if(typeof window.netExpandStation !== "function") window.netExpandStation = function(s){ return [s]; };
+if(typeof window.netFixStops      !== "function") window.netFixStops      = function(n){ return n; };
 (function applyNetworkTheme(){
   const t = NETWORK.theme || {};
   const rgb = t.tintRgb || "218,4,66";
@@ -1081,8 +1088,11 @@ function openDetail(ci){
   html += '<div class="section-header" style="padding-left:4px;">乗り換え案内</div><div class="timeline">';
   cd.legs.forEach((leg)=>{
     if(leg.kind === "ride"){
-      const l = LINES[leg.lines[0]];
-      const lineNames = leg.lines.map(code=>LINES[code].name).join("→");
+      /* 路線コードが network.js の lines に未定義でも詳細を落とさない(バッジ同様に堅牢化)。
+         未知コードは色フォールバック・名称は除外する。 */
+      const codes = (leg.lines && leg.lines.length) ? leg.lines : [NETWORK.defaultLine];
+      const l = LINES[codes[0]] || {c:"var(--gray)", name:""};
+      const lineNames = codes.map(code=>(LINES[code] && LINES[code].name) || "").filter(Boolean).join("→");
       html +=
         '<div class="tl-row"><div class="tl-line"><div class="tl-dot" style="border-color:'+l.c+';"></div></div>'+
         '<div style="flex:1;"><span class="tl-station">'+netDisplayStation(leg.from)+'</span> <span class="tl-time">'+leg.dep+'発</span></div></div>'+

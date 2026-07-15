@@ -1,161 +1,135 @@
 /* ═══════════════════════════════════════════════════════════════
-   どれトレ ネットワーク定義  ―― 都営新宿線＋京王線 版
-   index.html はこのファイルに完全依存する(路線データ・色・名称・種別ラベル・
-   キャプションはすべてここで定義)。別路線に載せ替えるときはこのファイルを差し替える。
-
-   稼働(時刻検索対象): 都営新宿線 ＋ 京王線(新線・本線・相模原・高尾)
-   準備中(prep): 京王動物園線・競馬場線(データ未収録)
-
-   新宿は2ノード: 「新宿」(都営↔京王新線の境界=新線側) と 「京王新宿」(京王本線起点)。
-   駅グループ機能で、登録時は「新宿」1つ、案内では「新宿 (新線)」/「新宿 (京王本線)」に出し分ける。
+   どれトレ ネットワーク定義  ―― 東急目黒線系統(相鉄〜東急〜南北/三田〜埼玉高速)
+   ＋ 東横線〜副都心線〜東武東上線(→小川町) 直通 版
+   index.html はこのファイルに完全依存する。別路線に載せ替えるときはこのファイルを差し替える。
    ═══════════════════════════════════════════════════════════════ */
 (function(global){
   "use strict";
 
   var NETWORK = {
     schemaVersion: 1,
-    id: "toei-shinjuku-keio-v1",
+    id: "tokyu-meguro-v1",
     appName: "どれトレ",
-    defaultLine: "KO",
-    defaultAnchor: "本八幡",
+    defaultLine: "MG",
+    defaultAnchor: "浦和美園",
 
     lines: {
-      S:  {c:"#6CB929", s:"S",  name:"都営新宿線"},
-      KO: {c:"#DD0077", s:"KO", name:"京王線"}
+      SH:{c:"#8F76D6", s:"SH", name:"東急新横浜線"},
+      TY:{c:"#DA0442", s:"TY", name:"東急東横線"},
+      MG:{c:"#009CD2", s:"MG", name:"東急目黒線"},
+      I: {c:"#0079C2", s:"I",  name:"都営三田線"},
+      N: {c:"#00AC9A", s:"N",  name:"東京メトロ南北線"},
+      SO:{c:"#0B2A6B", s:"SO", name:"相鉄線"},
+      SR:{c:"#1CADCA", s:"SR", name:"埼玉高速鉄道"},
+      FK:{c:"#9C5E31", s:"F",  name:"東京メトロ副都心線"},
+      TJ:{c:"#00559D", s:"TJ", name:"東武東上線"},
+      MM:{c:"#0071BC", s:"MM", name:"みなとみらい線"}
     },
     theme: {
-      tint:"#DD0077", tintRgb:"221,0,119", themeColor:"#DD0077",
-      heroLight:{top:"#A80059", bottom:"#DD0077"},
-      heroDark: {top:"#73003C", bottom:"#A80059"}
+      tint:"#DA0442", tintRgb:"218,4,66", themeColor:"#DA0442",
+      heroLight:{top:"#B4003A", bottom:"#DA0442"},
+      heroDark: {top:"#7A0025", bottom:"#B4003A"}
     },
     captions: {
-      supportedLines: "都営新宿線・京王線(新線/本線/相模原/高尾)",
-      transferNote:   "大島・笹塚・調布・北野・府中・高幡不動・京王多摩センターでは、同じホームの向かい側で乗り換えできます。"
+      supportedLines: "東横線・目黒線・新横浜線・副都心線・東上線と直通各線",
+      transferNote:   "日吉〜田園調布間の各駅・白金高輪・武蔵小山では、同じホームの向かい側で乗り換えできます。"
     },
 
     segments: {
-      SHINJUKU: [["本八幡",0],["篠崎",3],["瑞江",6],["一之江",8],["船堀",11],["東大島",13],["大島",16],["西大島",17],["住吉",19],["菊川",21],["森下",23],["浜町",24],["馬喰横山",26],["岩本町",28],["小川町",29],["神保町",31],["九段下",33],["市ケ谷",35],["曙橋",37],["新宿三丁目",40],["新宿",41]],
-      KEIONEW:  [["新宿",0],["初台",2],["幡ヶ谷",3],["笹塚",5]],
-      KEIOSTUB: [["京王新宿",0],["笹塚",4]],
-      KEIOMAIN: [["笹塚",0],["代田橋",1],["明大前",3],["下高井戸",5],["桜上水",7],["上北沢",8],["八幡山",10],["芦花公園",11],["千歳烏山",13],["仙川",16],["つつじヶ丘",18],["柴崎",20],["国領",21],["布田",23],["調布",25],["西調布",27],["飛田給",29],["武蔵野台",31],["多磨霊園",32],["東府中",35],["府中",37],["分倍河原",40],["中河原",42],["聖蹟桜ヶ丘",44],["百草園",47],["高幡不動",49],["南平",51],["平山城址公園",53],["長沼",55],["北野",57],["京王八王子",60]],
-      SAGAMIHARA: [["調布",0],["京王多摩川",2],["京王稲田堤",4],["京王よみうりランド",6],["稲城",8],["若葉台",11],["京王永山",14],["京王多摩センター",16],["京王堀之内",18],["南大沢",20],["多摩境",22],["橋本",25]],
-      TAKAO:    [["北野",0],["京王片倉",2],["山田",4],["めじろ台",6],["狭間",8],["高尾",10],["高尾山口",12]],
-      DOBUTSUEN:[["高幡不動",0],["多摩動物公園",3]],
-      KEIBAJO:  [["東府中",0],["府中競馬正門前",2]]
+      SOTETSU_MAIN:    [["海老名",0],["かしわ台",3],["さがみ野",5],["相模大塚",7],["大和",9],["瀬谷",12],["三ツ境",14],["希望ヶ丘",16],["二俣川",19],["鶴ケ峰",21],["西谷",24]],
+      SOTETSU_IZUMINO: [["湘南台",0],["ゆめが丘",2],["いずみ中央",4],["いずみ野",6],["弥生台",8],["緑園都市",10],["南万騎が原",12],["二俣川",15]],
+      SOTETSU_SHINYOKO:[["西谷",0],["羽沢横浜国大",3],["新横浜",7]],
+      SH:  [["新横浜",0],["新綱島",3],["日吉",6]],
+      COR: [["日吉",0],["元住吉",2],["武蔵小杉",4],["新丸子",5],["多摩川",7],["田園調布",9]],
+      MG:  [["田園調布",0],["奥沢",2],["大岡山",4],["洗足",6],["西小山",7],["武蔵小山",9],["不動前",11],["目黒",13]],
+      SHD: [["目黒",0],["白金台",2],["白金高輪",4]],
+      N:   [["白金高輪",0],["麻布十番",2],["六本木一丁目",4],["溜池山王",6],["永田町",8],["四ツ谷",10],["市ケ谷",12],["飯田橋",14],["後楽園",16],["東大前",18],["本駒込",19],["駒込",21],["西ケ原",23],["王子",25],["王子神谷",27],["志茂",29],["赤羽岩淵",31]],
+      I:   [["白金高輪",0],["三田",2],["芝公園",4],["御成門",5],["内幸町",7],["日比谷",9],["大手町",11],["神保町",13],["水道橋",15],["春日",16],["白山",18],["千石",20],["巣鴨",22],["西巣鴨",24],["新板橋",25],["板橋区役所前",27],["板橋本町",29],["本蓮沼",31],["志村坂上",33],["志村三丁目",34],["蓮根",36],["西台",38],["高島平",39],["新高島平",41],["西高島平",43]],
+      SR:  [["赤羽岩淵",0],["川口元郷",2],["南鳩ヶ谷",4],["鳩ヶ谷",6],["新井宿",8],["戸塚安行",10],["東川口",13],["浦和美園",16]],
+      TY_STUB: [["田園調布",0],["自由が丘",2],["都立大学",4],["学芸大学",6],["祐天寺",8],["中目黒",10],["代官山",11],["渋谷",14]],
+      /* 東横線 日吉→横浜(南=横浜側) */
+      TY_SOUTH: [["日吉",0],["綱島",2],["大倉山",4],["菊名",6],["妙蓮寺",8],["白楽",10],["東白楽",11],["反町",13],["横浜",16]],
+      /* みなとみらい線 横浜→元町・中華街(南=元町・中華街側) */
+      MM:       [["横浜",0],["新高島",2],["みなとみらい",4],["馬車道",6],["日本大通り",8],["元町・中華街",10]],
+      /* 東京メトロ副都心線: 渋谷 → 和光市(渋谷が南・和光市が北) */
+      FUKU: [["渋谷",0],["明治神宮前",2],["北参道",4],["新宿三丁目",6],["東新宿",8],["西早稲田",10],["雑司が谷",12],["池袋",14],["要町",16],["千川",18],["小竹向原",20],["氷川台",22],["平和台",24],["地下鉄赤塚",26],["地下鉄成増",28],["和光市",31]],
+      /* 東武東上線: 和光市 → 小川町(和光市が南・小川町が北の終端) */
+      TOJO: [["和光市",0],["朝霞",3],["朝霞台",6],["志木",9],["柳瀬川",11],["みずほ台",13],["鶴瀬",15],["ふじみ野",17],["上福岡",19],["新河岸",22],["川越",25],["川越市",27],["霞ケ関",30],["鶴ケ島",33],["若葉",35],["坂戸",38],["北坂戸",40],["高坂",43],["東松山",47],["森林公園",51],["つきのわ",54],["武蔵嵐山",57],["小川町",63]]
     },
 
     segmentLine: {
-      SHINJUKU:"S",
-      KEIONEW:"KO", KEIOSTUB:"KO", KEIOMAIN:"KO",
-      SAGAMIHARA:"KO", TAKAO:"KO", DOBUTSUEN:"KO", KEIBAJO:"KO"
+      SH:"SH",
+      COR:{shared:{TY:"TY"}, default:"MG"},
+      MG:"MG",
+      SHD:{shared:{I:"I", N:"N"}, default:"MG"},
+      N:"N", I:"I", SR:"SR",
+      TY_STUB:"TY",
+      TY_SOUTH:"TY", MM:"MM",
+      FUKU:"FK", TOJO:"TJ",
+      SOTETSU_SHINYOKO:"SO", SOTETSU_MAIN:"SO", SOTETSU_IZUMINO:"SO"
     },
-    segmentPrecedence: ["SHINJUKU","KEIONEW","KEIOSTUB","KEIOMAIN","SAGAMIHARA","TAKAO","DOBUTSUEN","KEIBAJO"],
+    segmentPrecedence: ["SH","COR","MG","SHD","N","I","SR","TY_STUB","TY_SOUTH","MM","FUKU","TOJO","SOTETSU_SHINYOKO","SOTETSU_MAIN","SOTETSU_IZUMINO"],
 
-    /* 対面乗り換え0分: 大島(都営新宿線の待避駅・各停⇔急行が同一ホーム接続)、
-       笹塚(京王線本線と京王新線の分岐・2面4線で対面乗り換え可)。
-       ※森下は1面2線で待避線が無いため対面乗り換え不可(除外)。 */
-    transferStations: ["大島","笹塚","調布","北野","府中","高幡不動","京王多摩センター"],
+    /* 対面乗り換え可能駅(乗換0分): 日吉〜田園調布の全駅 + 白金高輪 + 武蔵小山 */
+    transferStations: ["日吉","元住吉","武蔵小杉","新丸子","多摩川","田園調布","白金高輪","武蔵小山"],
 
-    /* 都営新宿線の急行通過駅(急行停車=新宿・市ケ谷・神保町・馬喰横山・森下・大島・船堀・本八幡) */
-    expressSkip: ["篠崎","瑞江","一之江","東大島","西大島","住吉","菊川","浜町","岩本町","小川町","九段下","曙橋","新宿三丁目"],
+    expressSkip: ["元住吉","新丸子","奥沢","洗足","西小山","不動前"],
+    expressSkipSotetsu: ["かしわ台","さがみ野","相模大塚","瀬谷","三ツ境","希望ヶ丘","鶴ケ峰","ゆめが丘","いずみ中央","弥生台","緑園都市","南万騎が原"],
+    expressSkipFukutoshin:     ["北参道","東新宿","西早稲田","雑司が谷","要町","千川","氷川台","平和台","地下鉄赤塚","地下鉄成増"],
+    commExpressSkipFukutoshin: ["北参道","東新宿","西早稲田","雑司が谷","要町","千川"],
+    /* 東横線: 急行 / 通勤特急 / 特急 の通過駅(本区間は日吉が分岐停車のため通特と特急は同一) */
+    expressSkipToyoko: ["元住吉","新丸子","都立大学","祐天寺","代官山","大倉山","妙蓮寺","白楽","東白楽","反町","新高島"],
+    commLtdSkipToyoko: ["元住吉","新丸子","多摩川","田園調布","都立大学","学芸大学","祐天寺","代官山","綱島","大倉山","妙蓮寺","白楽","東白楽","反町","新高島"],
+    ltdSkipToyoko:     ["元住吉","新丸子","多摩川","田園調布","都立大学","学芸大学","祐天寺","代官山","日吉","綱島","大倉山","妙蓮寺","白楽","東白楽","反町","新高島","馬車道","日本大通り"],
 
     branches: {
-      KO: {label:"京王線直通方面", eastAnchor:"本八幡"}
-    },
-
-    /* ═════════ インプットツール用ラベル ═════════
-       nb=eastAnchorへ近づく向き / sb=その逆。別路線に載せ替えるときはここも書き換える。 */
-    directions: {
-      nb: { badge:"上り", button:"上り(京王線方面 → 本八幡)", section:"上り(京王線方面 → 本八幡)" },
-      sb: { badge:"下り", button:"下り(本八幡 → 京王線方面)", section:"下り(本八幡 → 京王線方面)" }
-    },
-    /* 種別トグル: tk=expressSkip(都営急行通過駅) / so=expressSkipSotetsu を使う区間。
-       通過駅リストが空の区間トグルはツール側で自動的に非表示になる。 */
-    typeLabels: {
-      tk: { region:"都営新宿線内の種別", loc:"各停", exp:"急行" },
-      so: { region:"種別(補助区間)",       loc:"各停", exp:"急行" }
-    },
-
-    /* 駅グループ: 登録時は1つの名前で選び、案内では別々のホームとして出し分ける。
-       members = 物理ノード(探索は全メンバーへ展開), labels = 案内表示名。 */
-    stationGroups: {
-      "新宿": { members:["新宿","京王新宿"], labels:{ "新宿":"新宿 (新線)", "京王新宿":"新宿 (京王本線)" } }
+      I:  {label:"三田線方面(→西高島平)",       eastAnchor:"西高島平"},
+      N:  {label:"南北線・埼玉高速(→浦和美園)",  eastAnchor:"浦和美園"},
+      TY: {label:"東横線・副都心線・東上線方面(→小川町)", eastAnchor:"小川町"}
     },
 
     pickerGroups: [
-      {label:"都営新宿線",              segs:["SHINJUKU"]},
-      {label:"京王新線",                segs:["KEIONEW"]},
-      {label:"京王線 新宿口",            segs:["KEIOSTUB"]},
-      {label:"京王線 本線",              segs:["KEIOMAIN"]},
-      {label:"京王相模原線",             segs:["SAGAMIHARA"]},
-      {label:"京王高尾線",               segs:["TAKAO"]},
-      {label:"京王動物園線(準備中)",      segs:["DOBUTSUEN"],  prep:true},
-      {label:"京王競馬場線(準備中)",      segs:["KEIBAJO"],    prep:true}
+      {label:"相鉄本線",              segs:["SOTETSU_MAIN"]},
+      {label:"相鉄いずみ野線",        segs:["SOTETSU_IZUMINO"]},
+      {label:"相鉄新横浜線",          segs:["SOTETSU_SHINYOKO"]},
+      {label:"東急新横浜線・並走区間", segs:["SH","COR"]},
+      {label:"東急目黒線",            segs:["MG","SHD"]},
+      {label:"東京メトロ南北線",       segs:["N"]},
+      {label:"埼玉高速鉄道",          segs:["SR"]},
+      {label:"都営三田線",            segs:["I"]},
+      {label:"東急東横線 渋谷方面",     segs:["TY_STUB"]},
+      {label:"東急東横線 横浜方面",     segs:["TY_SOUTH"]},
+      {label:"みなとみらい線",         segs:["MM"]},
+      {label:"東京メトロ副都心線",     segs:["FUKU"]},
+      {label:"東武東上線 小川町方面",   segs:["TOJO"]}
     ]
   };
 
   /* ═════════ 路線固有の表示ロジック ═════════ */
-  /* 種別ラベル。kind(乗車区間の種別)が渡ればそれを優先、無ければ列車既定。
-     loc=各停,exp=急行,rapid=快速,sexp=区間急行,ltd=特急,liner=京王ライナー */
-  var KEIO_TYPE = { loc:"各停", exp:"急行", rapid:"快速", sexp:"区間急行", ltd:"特急", liner:"京王ライナー" };
-  function netTypeLabel(tr, lineCode, kind){
-    var k = (kind != null) ? kind : ((tr.kindTk != null) ? tr.kindTk : tr.kindSo);
-    return KEIO_TYPE[k] || "各停";
-  }
-  /* 停車駅名の補正: データ上は新線側も本線側も「新宿」なので、隣接駅で実体を判定し、
-     本線側(笹塚に隣接・初台に非隣接)を「京王新宿」に振り分ける。 */
-  function netFixStops(names){
-    for(var i=0;i<names.length;i++){
-      if(names[i] !== "新宿") continue;
-      var a=names[i-1], b=names[i+1];
-      if((a==="笹塚"||b==="笹塚") && !(a==="初台"||b==="初台")) names[i]="京王新宿";
+  function netTypeLabel(tr, lineCode){
+    if(lineCode === "SO") return tr.kindSo === "exp" ? "特急" : "各停";
+    if(lineCode === "FK"){
+      if(tr.kindFk === "exp")  return "急行";
+      if(tr.kindFk === "cexp") return "通勤急行";
+      return "各停";
     }
-    return names;
+    if(lineCode === "TY" || lineCode === "MM"){
+      if(tr.kindTy === "exp")  return "急行";
+      if(tr.kindTy === "cexp") return "通勤特急";
+      if(tr.kindTy === "ltd")  return "特急";
+      return "各停";
+    }
+    if(lineCode === "TJ") return "各停";
+    return tr.kindTk === "exp" ? "急行" : "各停";
   }
-  /* 列車の説明: 始発駅と、区間ごとの種別を stops[i][3](区間種別)から組み立てる。
-     例: 「橋本始発　橋本〜新宿間は区間急行、新宿〜本八幡間は各駅停車」 */
-  var DESC_TYPE = { loc:"各駅停車", exp:"急行", rapid:"快速", sexp:"区間急行", ltd:"特急", liner:"京王ライナー" };
   function netTrainDesc(tr){
-    var stops = tr.stops || [];
-    var defKind = (tr.kindTk != null ? tr.kindTk : tr.kindSo) || "loc";
-    if(stops.length < 2) return netDisplayStation((stops[0] && stops[0][0]) || tr.origin || "") + "始発";
-    var runs = [];
-    for(var i=0;i<stops.length-1;i++){
-      var k = stops[i][3] || defKind;
-      var nextName = stops[i+1][0];
-      if(runs.length && runs[runs.length-1].type === k){
-        runs[runs.length-1].end = nextName;
-      }else{
-        runs.push({ type:k, start:stops[i][0], end:nextName });
-      }
-    }
-    var origin = netDisplayStation(stops[0][0]);
-    if(runs.length === 1){
-      return origin + "始発・全区間" + (DESC_TYPE[runs[0].type] || "各駅停車");
-    }
-    var parts = runs.map(function(r){
-      return netDisplayStation(r.start) + "〜" + netDisplayStation(r.end) + "間は" + (DESC_TYPE[r.type] || "各駅停車");
-    });
-    return origin + "始発　" + parts.join("、");
-  }
-  /* 区間(隣り合う停車駅の間)が乗り入れる路線を判定。両駅を同時に含む
-     セグメントを優先順で探し、その路線コードを返す。京王線内で完結する
-     乗車や、京王本線新宿(新線非経由)の判定に使う。 */
-  function netEdgeLine(a, b, train){
-    var prec = NETWORK.segmentPrecedence;
-    for(var s=0;s<prec.length;s++){
-      var key = prec[s], seg = NETWORK.segments[key];
-      var hasA=false, hasB=false;
-      for(var i=0;i<seg.length;i++){ if(seg[i][0]===a) hasA=true; if(seg[i][0]===b) hasB=true; }
-      if(hasA && hasB){
-        var rule = NETWORK.segmentLine[key];
-        if(typeof rule === "string") return rule;
-        var bl = rule.shared && train && rule.shared[train.branch];
-        if(bl) return bl;
-        return rule.default;
-      }
-    }
-    return null;
+    if(tr.branch==="TY") return tr.dir==="nb"
+      ? "東横線→副都心線→東上線 方面 直通・並走区間で乗換可"
+      : "東上線・副都心線・東横線から新横浜線直通";
+    var via = tr.branch==="I" ? "三田線" : "南北線";
+    if(tr.origin==="白金高輪") return "白金高輪始発・座れる可能性大";
+    if(tr.origin==="日吉") return "日吉始発・目黒線→"+via+" 直通";
+    return (tr.dir==="nb" ? "新横浜線→目黒線→"+via : via+"→目黒線→新横浜線")+" 直通";
   }
 
   /* ═════════ 共通ユーティリティ ═════════ */
@@ -194,41 +168,18 @@
     }
     return null;
   }
-  /* 駅グループ ヘルパー */
-  function netGroupOf(name){
-    var G = NETWORK.stationGroups || {};
-    for(var k in G){ if(G[k].members.indexOf(name) >= 0) return k; }
-    return null;
-  }
-  function netExpandStation(name){
-    var g = (NETWORK.stationGroups || {})[name];
-    return g ? g.members.slice() : [name];
-  }
-  function netDisplayStation(name){
-    var G = NETWORK.stationGroups || {};
-    for(var k in G){ if(G[k].labels && G[k].labels[name]) return G[k].labels[name]; }
-    return name;
-  }
   function netStationsOfGroups(includePrep){
-    var seen = new Set(), out = [];
+    var seen=new Set(), out=[];
     NETWORK.pickerGroups.forEach(function(gr){
       if(gr.prep && !includePrep) return;
-      gr.segs.forEach(function(sk){
-        NETWORK.segments[sk].forEach(function(pair){
-          var label = netGroupOf(pair[0]) || pair[0];
-          if(!seen.has(label)){ seen.add(label); out.push(label); }
-        });
-      });
+      gr.segs.forEach(function(sk){ NETWORK.segments[sk].forEach(function(pair){ if(!seen.has(pair[0])){seen.add(pair[0]);out.push(pair[0]);} }); });
     });
     return out;
   }
 
-  /* ═════════ グローバル公開 ═════════ */
   global.NETWORK = NETWORK;
   global.netTypeLabel = netTypeLabel;
-  global.netFixStops = netFixStops;
   global.netTrainDesc = netTrainDesc;
-  global.netEdgeLine = netEdgeLine;
   global.joinPaths = joinPaths;
   global.reversePath = reversePath;
   global.sliceFrom = sliceFrom;
@@ -237,8 +188,5 @@
   global.netBfsDist = netBfsDist;
   global.netBfsPath = netBfsPath;
   global.netStationsOfGroups = netStationsOfGroups;
-  global.netGroupOf = netGroupOf;
-  global.netExpandStation = netExpandStation;
-  global.netDisplayStation = netDisplayStation;
 
 })(typeof window !== "undefined" ? window : this);
